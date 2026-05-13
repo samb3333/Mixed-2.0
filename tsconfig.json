@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "module": "CommonJS",        // Ensure you're using a module system Node.js supports
+    "target": "ES2020",          // Set the target version for JS
+    "esModuleInterop": true,     // Enable interoperability between ES modules and CommonJS
+    "skipLibCheck": true,        // Speed up the build by skipping type checks of external libraries
+    "moduleResolution": "node",   // Ensure Node.js module resolution strategy
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "strict": true,
+    "sourceMap": true,
+    "resolveJsonModule": true
+  },
+  "include": [
+    "src", "src/Ranks"]
+}

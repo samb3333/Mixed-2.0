@@ -1,0 +1,26 @@
+{
+  "name": "od-comp",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "npm run build && node --enable-source-maps dist/index.js",
+    "build": "tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "discord.js": "^14.15.3",
+    "dotenv": "^16.4.5",
+    "mongoose": "^8.7.2",
+    "source-map": "^0.7.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "install": "^0.13.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.2"
+  }
+}
