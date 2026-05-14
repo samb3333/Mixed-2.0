@@ -115,11 +115,15 @@ export class TournamentManager {
   }
 
   checkEmbed(tournamentName: string): EmbedBuilder {
+    let participantsText = this.getActivityChecks(tournamentName)?.notConfirmed.size ? [...this.getActivityChecks(tournamentName)!.notConfirmed].map(id => `<@${id}>`).join('\n') : 'Everyone has confirmed!';
+    if (participantsText.length > 4000) {
+      participantsText = participantsText.slice(0, 3990) + '\n...and more';
+    }
     const embed = new EmbedBuilder()
       .setTitle(`${tournamentName} Tournament - (${Math.max(0, (this.get(tournamentName)?.participants.size || 0) - (this.getActivityChecks(tournamentName)?.notConfirmed.size || 0))}) confirmed`)
       .setColor(0x57f287)
-      .addFields({ name: 'Not confirmed', value: this.getActivityChecks(tournamentName)?.notConfirmed.size ? [...this.getActivityChecks(tournamentName)!.notConfirmed].map(id => `<@${id}>`).join('\n') : 'Everyone has confirmed!' });
-    
+      .setDescription(`Not Confirmed yet:\n${participantsText}`);
+
     return embed;
   }
 
