@@ -12,15 +12,15 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "discord.js": "^14.15.3",
-    "dotenv": "^16.4.5",
-    "mongoose": "^8.7.2",
+    "discord.js": "^14.26.4",
+    "dotenv": "^16.6.1",
+    "mongoose": "^8.23.1",
     "source-map": "^0.7.6"
   },
   "devDependencies": {
-    "@types/node": "^25.6.2",
+    "@types/node": "^25.7.0",
     "install": "^0.13.0",
     "ts-node": "^10.9.2",
-    "typescript": "^5.8.2"
+    "typescript": "^5.9.3"
   }
 }
