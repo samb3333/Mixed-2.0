@@ -59,34 +59,36 @@ module.exports = {
 			const tournamentName = nameParts.join(':');
 
 			if (action === 'tournament_join') {
+				await i.deferReply({ ephemeral: true });
 				const result = manager.join(tournamentName, i.user.id);
 				if (result === 'already_in') {
-				return i.reply({ content: 'You are already in this tournament!', ephemeral: true });
+				return i.editReply({ content: 'You are already in this tournament!' });
 				}
 				if (result === 'not_found') {
-				return i.reply({ content: 'Tournament already started.', ephemeral: true });
+				return i.editReply({ content: 'Tournament already started.' });
 				}
 				if (result === 'not_registered') {
-				return i.reply({ 
-					content: 'You have not linked a username, contact a staff member to fix this.', 
-					ephemeral: true 
+				return i.editReply({ 
+					content: 'You have not linked a username, contact a staff member to fix this.'
 				});
 				}
-				await i.reply({ content: `You joined **${tournamentName}**!`, ephemeral: true });
+				await i.editReply({ content: `You joined **${tournamentName}**!` });
 
 			} else if (action === 'tournament_leave') {
+				await i.deferReply({ ephemeral: true });
 				const result = manager.leave(tournamentName, i.user.id);
 				if (result === 'not_in') {
-				return i.reply({ content: "You aren't in this tournament.", ephemeral: true });
+				return i.editReply({ content: "You aren't in this tournament." });
 				}
 				if (result === 'not_found') {
-				return i.reply({ content: 'Tournament already started.', ephemeral: true });
+				return i.editReply({ content: 'Tournament already started.' });
 				}
-				await i.reply({ content: `You left **${tournamentName}**.`, ephemeral: true });
+				await i.editReply({ content: `You left **${tournamentName}**.` });
 			} else if (action === 'check') {
+				await i.deferUpdate();
 				const confirmResult = await manager.confirmCheck(tournamentName, i.user.id);
 				if (!confirmResult) {
-					return i.reply({ content: 'Failed to confirm, tournament already started.', ephemeral: true });
+					return i.followUp({ content: 'Failed to confirm, tournament already started.', ephemeral: true });
 				}
 
 				const originalRow = i.message.components[0] as ActionRow<ButtonComponent>;
@@ -98,7 +100,6 @@ module.exports = {
 				);
 
 				await i.message.edit({ content: `You confirmed your participation in **${tournamentName}**!`, components: [disabledRow] });
-				await i.deferUpdate();
 				
 				return;
 			} else if (action === 'check_end') {
@@ -120,7 +121,7 @@ module.exports = {
 				await i.reply({ content: `Activity check for **${tournamentName}** has ended!`, ephemeral: true });
 				return;
 			} else if (action === 'confirm_teams') {
-				i.deferReply({ ephemeral: true });
+				await i.deferReply({ ephemeral: true });
 				if (!manager.get(tournamentName)) {
 					return i.editReply({ content: 'Tournament not found.' });
 				}
@@ -274,12 +275,17 @@ module.exports = {
 
 			// Update the signup embed with new participant list
 			const tournament = manager.get(tournamentName)!;
-			const memberList =
+			let memberList =
 				tournament.participants.size > 0
 				? [...tournament.participants].map(id => `<@${id}> (${players.get(id)?.username || 'Unknown'})`).join('\n')
 				: 'No one yet...';
 
-			const updatedEmbed = EmbedBuilder.from(i.message.embeds[0]).setDescription(memberList);
+			if (memberList.length > 4000) {
+				// If the member list exceeds Discord's embed field character limit, truncate it and add a note
+				memberList = memberList.slice(0, 3990) + '\n...and more';
+			}
+
+			const updatedEmbed = EmbedBuilder.from(i.message.embeds[0]).setTitle(`${tournament.name} Tournament (${tournament.participants.size})`).setDescription(memberList).setFields([]);
 
 			await i.message.edit({ embeds: [updatedEmbed] });
 			return;

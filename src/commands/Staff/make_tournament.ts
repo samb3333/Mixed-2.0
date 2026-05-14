@@ -35,9 +35,9 @@ module.exports = {
     }
 
     const embed = new EmbedBuilder()
-      .setTitle(`${name} Tournament`)
+      .setTitle(`${name} Tournament (0)`)
       .setColor(0x5865f2)
-      .addFields({ name: 'Participants (0)', value: 'No one yet...' });
+      .setDescription('No one yet...');
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
