@@ -279,10 +279,7 @@ module.exports = {
 				? [...tournament.participants].map(id => `<@${id}> (${players.get(id)?.username || 'Unknown'})`).join('\n')
 				: 'No one yet...';
 
-			const updatedEmbed = EmbedBuilder.from(i.message.embeds[0]).setFields({
-				name: `Participants (${tournament.participants.size})`,
-				value: memberList,
-			});
+			const updatedEmbed = EmbedBuilder.from(i.message.embeds[0]).setDescription(memberList);
 
 			await i.message.edit({ embeds: [updatedEmbed] });
 			return;
