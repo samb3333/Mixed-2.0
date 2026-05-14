@@ -4,7 +4,7 @@ import { PlayerManager } from '../../classes/PlayerManager';
 const players = PlayerManager.getInstance();
 
 module.exports = {
-	data: new SlashCommandBuilder().setName('link').setDescription('Edit your name').addStringOption(option =>
+	data: new SlashCommandBuilder().setName('link').setDescription('Register or edit your name').addStringOption(option =>
       option.setName('meta').setDescription('Your meta name').setRequired(true)
     ),
 
