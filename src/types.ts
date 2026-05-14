@@ -37,3 +37,9 @@ export interface TournamentTeams {
   odcTournamentId?: string;
   teams: Record<string, string[]>; // { 'Team 1': ['id1', 'id2', ...] }
 }
+
+export interface MatchRecord {
+  matchId: string;
+  threadId: string;
+  completed: boolean;
+}

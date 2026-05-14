@@ -1,15 +1,21 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { TournamentTeams } from '../types';
+import { MatchRecord, TournamentTeams } from '../types';
+import { ChannelType, TextChannel, ThreadAutoArchiveDuration, ThreadChannel } from 'discord.js';
+import { client } from '..';
 
 const DB_PATH = path.join(__dirname, '../../data/teams.json');
+
+const MATCHES_PATH = path.join(__dirname, '../../data/posted_matches.json');
 
 export class TeamsManager {
   private static instance: TeamsManager;
   private data = new Map<string, TournamentTeams>();
+  private postedMatches = new Map<string, MatchRecord>();
 
   private constructor() {
     this.load();
+    this.loadPostedMatches();
   }
 
   static getInstance(): TeamsManager {
@@ -32,6 +38,7 @@ export class TeamsManager {
         this.data.set(t.tournamentName, t);
       }
       console.log(`Loaded ${this.data.size} odc tournaments(s) from disk`);
+      this.startPolling();
     } catch (err) {
       console.error('Failed to load teams:', err);
     }
@@ -43,6 +50,139 @@ export class TeamsManager {
       fs.writeFileSync(DB_PATH, JSON.stringify([...this.data.values()], null, 2));
     } catch (err) {
       console.error('Failed to save teams:', err);
+    }
+  }
+
+  private loadPostedMatches(): void {
+    try {
+      if (!fs.existsSync(MATCHES_PATH)) return;
+      const raw = fs.readFileSync(MATCHES_PATH, 'utf-8');
+      const parsed: MatchRecord[] = JSON.parse(raw);
+      for (const record of parsed) {
+        this.postedMatches.set(record.matchId, record);
+      }
+      console.log(`Loaded ${this.postedMatches.size} posted match(es) from disk`);
+    } catch (err) {
+      console.error('Failed to load posted matches:', err);
+    }
+  }
+
+  private savePostedMatches(): void {
+    try {
+      fs.writeFileSync(MATCHES_PATH, JSON.stringify([...this.postedMatches.values()], null, 2));
+    } catch (err) {
+      console.error('Failed to save posted matches:', err);
+    }
+  }
+
+  async startPolling(intervalMs: number = 60_000): Promise<void> {
+    for (const tournament of this.data.values()) {
+      console.log(`Checking games for ${tournament.tournamentName}...`);
+      await this.checkGames(tournament);
+    }
+
+    setInterval(async () => {
+      for (const tournament of this.data.values()) {
+        //console.log(`Checking games for ${tournament.tournamentName}...`);
+        await this.checkGames(tournament);
+      }
+    }, intervalMs);
+  }
+
+  private async checkGames(tournament: TournamentTeams): Promise<void> {
+    try {
+      const res = await fetch(
+        `https://tournament.oriondriftcompetitive.com/api/tournaments/${tournament.odcTournamentId}`
+      );
+
+      const matches = await res.json();
+      if (!matches.data || !Array.isArray(matches.data.matches)) {
+        console.error(`Invalid ODC data for ${tournament.tournamentName}`);
+        return;
+      }
+      for (const match of matches.data.matches) {
+
+        const record = this.postedMatches.get(match);
+        if (!record) {
+          const res = await fetch(
+            `https://tournament.oriondriftcompetitive.com/api/matches/${match}`
+          );
+          const currentMatch = await res.json();
+          if (!currentMatch.data) continue;
+          if (currentMatch.data.status === 'scheduled') {
+            console.log(`${currentMatch.data.home.name} vs ${currentMatch.data.away.name}`);
+            console.log(`${currentMatch.data.stationName} ${currentMatch.data.arena} ${tournament.odcTournamentId}`);
+
+            const channel = await client.channels.fetch(process.env.MatchesChannelID as string) as TextChannel;
+            if (!channel || !channel.isTextBased()) {
+              console.error('Matches channel not found!');
+              return;
+            }
+
+            const thread = await channel.threads.create({
+              name: `Round: ${currentMatch.data.round} - ${currentMatch.data.home.name} vs ${currentMatch.data.away.name}`,
+              type: ChannelType.PrivateThread,
+              invitable: false,
+              autoArchiveDuration: ThreadAutoArchiveDuration.OneHour,
+            });
+
+            await thread.send(`Round: ${currentMatch.data.round} - ${currentMatch.data.home.name} vs ${currentMatch.data.away.name}`)
+
+            let message = `## Station: ${currentMatch.data.stationName}\n ### Arena: ${currentMatch.data.arena}\n ### Best of ${currentMatch.data.bestOf}\n`
+
+            message += "\n"
+            message += "\n"
+            for (const user_id of this.getTeam(tournament.tournamentName, currentMatch.data.home.name) || []) {
+              message += `<@${user_id}> `;
+            }
+
+            message += "vs ";
+
+            for (const user_id of this.getTeam(tournament.tournamentName, currentMatch.data.away.name) || []) {
+                message += `<@${user_id}> `
+            }
+
+            await thread.send(message);
+
+            this.postedMatches.set(match, {
+              matchId: match,
+              threadId: thread.id,
+              completed: false,
+            });
+            this.savePostedMatches();
+          }
+        }
+        else if (record && !record.completed) {
+          const res = await fetch(
+            `https://tournament.oriondriftcompetitive.com/api/matches/${match}`
+          );
+          const currentMatch = await res.json();
+
+          if (currentMatch.data.status === 'completed') {
+            const thread = await client.channels.fetch(record.threadId) as ThreadChannel;
+            
+            if (thread && thread.isTextBased()) {
+
+              let message = `### ${currentMatch.data.home.name} ${currentMatch.data.home.score} - ${currentMatch.data.away.score} ${currentMatch.data.away.name}`;
+              currentMatch.data.matchScores.forEach((score: any, index: number) => {
+                  const round = index + 1;
+                  message += `\nRound ${round}: ${score.home} - ${score.away}`;
+              });
+              await thread.send(message);
+
+              console.log(`${currentMatch.data.home.name} ${currentMatch.data.home.score} - ${currentMatch.data.away.score} ${currentMatch.data.away.name}`);
+              record.completed = true;
+              this.savePostedMatches();
+            } else {
+              console.error(`Thread ${record.threadId} not found for completed match ${match}`);
+            }
+            
+          }
+          
+        }   
+      }
+    } catch (err) {
+      console.error(`Failed to check games for ${tournament.tournamentName}:`, err);
     }
   }
 
