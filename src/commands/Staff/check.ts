@@ -48,6 +48,7 @@ module.exports = {
         );
 
         await interaction.editReply({ 
+            content: null,
             embeds: [manager.checkEmbed(name)],
             components: [row]
         });
