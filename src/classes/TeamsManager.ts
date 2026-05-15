@@ -3,6 +3,7 @@ import * as path from 'path';
 import { MatchRecord, TournamentTeams } from '../types';
 import { ChannelType, TextChannel, ThreadAutoArchiveDuration, ThreadChannel } from 'discord.js';
 import { client } from '..';
+import { PlayerManager } from './PlayerManager';
 
 const DB_PATH = path.join(__dirname, '../../data/teams.json');
 
@@ -89,6 +90,18 @@ export class TeamsManager {
     }, intervalMs);
   }
 
+  // def expected_score(player_elo, opponent_elo):
+  //   return 1 / (1 + 10 ** ((opponent_elo - player_elo) / 400))
+
+  // def update_elo(player_elo, opponent_elo, result, k=32):  
+  //     expected = expected_score(player_elo, opponent_elo)  
+  //     return round(player_elo + k * (result - expected))
+
+  private mmrCalc(player_elo: number, opponent_elo: number, result: number, k: number = 32): number {
+    const expected = 1 / (1 + 10 ** ((opponent_elo - player_elo) / 400));
+    return Math.round(k * (result - expected));
+  }
+
   private async checkGames(tournament: TournamentTeams): Promise<void> {
     try {
       const res = await fetch(
@@ -172,13 +185,49 @@ export class TeamsManager {
 
               console.log(`${currentMatch.data.home.name} ${currentMatch.data.home.score} - ${currentMatch.data.away.score} ${currentMatch.data.away.name}`);
               record.completed = true;
+
+              let winners = null;
+              let losers = null;
+
+              if (currentMatch.data.home.score > currentMatch.data.away.score) {
+                winners = this.getTeam(tournament.tournamentName, currentMatch.data.home.name) || [];
+                losers = this.getTeam(tournament.tournamentName, currentMatch.data.away.name) || [];
+              } else {
+                winners = this.getTeam(tournament.tournamentName, currentMatch.data.away.name) || [];
+                losers = this.getTeam(tournament.tournamentName, currentMatch.data.home.name) || [];
+              }
+
+              const winnerAvg = winners.reduce((sum, userId) => {
+                const player = PlayerManager.getInstance().get(userId);
+                return sum + (player ? player.mmr : 1000);
+              }, 0) / winners.length;
+
+              const loserAvg = losers.reduce((sum, userId) => {
+                const player = PlayerManager.getInstance().get(userId);
+                return sum + (player ? player.mmr : 1000);
+              }, 0) / losers.length;
+
+              for (const userId of winners) {
+                const player = PlayerManager.getInstance().get(userId);
+                if (player) {
+                  const newMMR = this.mmrCalc(player.mmr, loserAvg, 1);
+                  PlayerManager.getInstance().updateMMR(userId, newMMR);
+                }
+              }
+
+              for (const userId of losers) {
+                const player = PlayerManager.getInstance().get(userId);
+                if (player) {
+                  const newMMR = this.mmrCalc(player.mmr, winnerAvg, 0);
+                  PlayerManager.getInstance().updateMMR(userId, newMMR);
+                }
+              }
+
               this.savePostedMatches();
             } else {
               console.error(`Thread ${record.threadId} not found for completed match ${match}`);
             }
-            
           }
-          
         }   
       }
     } catch (err) {
