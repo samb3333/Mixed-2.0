@@ -59,7 +59,7 @@ export class TournamentManager {
       t.participants.delete(userId);
       count++;
     }
-
+    this.save();
     console.log(`Ended activity check for ${tournamentName}. Removed ${count} participant(s).`);
     this.activityChecks.delete(tournamentName);
     return true;
@@ -143,7 +143,7 @@ export class TournamentManager {
 
     const msg = await (channel as TextChannel).messages.fetch(a.msgId);
     const embed = this.checkEmbed(tournamentName);
-    await msg.edit({ content: '', embeds: [embed] });
+    await msg.edit({ content: null, embeds: [embed] });
 
     return true;
   } catch (err) {
