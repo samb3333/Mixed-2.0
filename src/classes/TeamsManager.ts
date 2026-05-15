@@ -207,10 +207,15 @@ export class TeamsManager {
                 return sum + (player ? player.mmr : 1000);
               }, 0) / losers.length;
 
+              let multiplier = 4 *currentMatch.data.bestOf + 12
+                if (currentMatch.data.round < 0) {
+                  multiplier = multiplier * 0.75
+                }
+
               for (const userId of winners) {
                 const player = PlayerManager.getInstance().get(userId);
                 if (player) {
-                  const newMMR = this.mmrCalc(player.mmr, loserAvg, 1);
+                  const newMMR = this.mmrCalc(player.mmr, loserAvg, 1, multiplier);
                   PlayerManager.getInstance().updateMMR(userId, newMMR);
                 }
               }
@@ -218,7 +223,7 @@ export class TeamsManager {
               for (const userId of losers) {
                 const player = PlayerManager.getInstance().get(userId);
                 if (player) {
-                  const newMMR = this.mmrCalc(player.mmr, winnerAvg, 0);
+                  const newMMR = this.mmrCalc(player.mmr, winnerAvg, 0, multiplier);
                   PlayerManager.getInstance().updateMMR(userId, newMMR);
                 }
               }
