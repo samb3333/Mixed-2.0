@@ -272,7 +272,7 @@ module.exports = {
 
 			} else {
 				// log unrecognized buttons
-				console.log(i.customId);
+				console.log('Unrecognized button:', i.customId);
 				return;
 			}
 
