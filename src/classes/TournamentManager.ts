@@ -261,6 +261,10 @@ export class TournamentManager {
         .setEmoji('✅')
     );
 
+    if (messageContent.length > 2000) {
+      messageContent = messageContent.slice(0, 1990) + '\n...and more';
+    }
+
     interaction.followUp({ content: messageContent, components: [row] });
 
     return true;
@@ -277,18 +281,22 @@ export class TournamentManager {
 
     const teams = this.greedyTeamAssignment(activePlayers, team_size);
 
-    let messageContent = `**${name}** Tournament Teams:\n`;
+    let messageContent: string[] = [];
+    let content = `**${name}** Tournament Teams:\n`
     for (const [index, team] of teams.entries()) {
       const teamMembers = team.map(id => `<@${id}>`).join(', ');
       const avgMMR = Math.round(team.reduce((sum, id) => sum + (PlayerManager.getInstance().get(id)?.mmr ?? 1000), 0) / team.length);
-      if (messageContent.length + `**Team ${index + 1}:** ${teamMembers} (${avgMMR})\n`.length > 2000) {
-        await channel.send({ content: messageContent });
-        messageContent = '';
+      content += `**Team ${index + 1}:** ${teamMembers} (${avgMMR})\n`;
+
+      if (content.length > 1900) {
+        messageContent.push(content);
+        content = '';
       }
-      messageContent += `**Team ${index + 1}:** ${teamMembers} (${avgMMR})\n`;
     };
 
-    await channel.send({ content: messageContent });
+    for (const chunk of messageContent) {
+      await channel.send({ content: chunk });
+    }
 
     let payload = {
             "name": name,
