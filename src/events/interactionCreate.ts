@@ -103,6 +103,9 @@ module.exports = {
 				
 				return;
 			} else if (action === 'check_end') {
+				if (!i.memberPermissions?.has('Administrator')) {
+					return i.reply({ content: 'You do not have permission to end the activity check.', ephemeral: true });
+				}
 				const result = await manager.endCheck(tournamentName);
 				if (!result) {
 					return i.reply({ content: 'Failed to end activity check.', ephemeral: true });
