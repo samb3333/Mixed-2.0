@@ -278,6 +278,8 @@ export class TournamentManager {
     const allPlayers = [...t.participants];
     const validCount = Math.floor(allPlayers.length / team_size) * team_size;
     const activePlayers = allPlayers.slice(0, validCount);
+    const subs = allPlayers.slice(validCount);
+    const subsText = subs.length > 0 ? `\n\n**Substitutes (not assigned to teams):**\n${subs.map(id => `<@${id}>`).join(', ')}` : '';
 
     const teams = this.greedyTeamAssignment(activePlayers, team_size);
 
@@ -285,18 +287,19 @@ export class TournamentManager {
     let content = `**${name}** Tournament Teams:\n`
     for (const [index, team] of teams.entries()) {
       const teamMembers = team.map(id => `<@${id}>`).join(', ');
-      const avgMMR = Math.round(team.reduce((sum, id) => sum + (PlayerManager.getInstance().get(id)?.mmr ?? 1000), 0) / team.length);
-      content += `**Team ${index + 1}:** ${teamMembers} (${avgMMR})\n`;
-
+      content += `**Team ${index + 1}:** ${teamMembers}\n`;
       if (content.length > 1900) {
         messageContent.push(content);
         content = '';
       }
     };
 
+    messageContent.push(content);
+
     for (const chunk of messageContent) {
       await channel.send({ content: chunk });
     }
+    await channel.send(subsText);
 
     let payload = {
             "name": name,
