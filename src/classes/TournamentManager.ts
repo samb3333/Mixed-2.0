@@ -262,7 +262,7 @@ export class TournamentManager {
     );
 
     if (messageContent.length > 2000) {
-      messageContent = messageContent.slice(0, 1990) + '\n...and more';
+      messageContent = messageContent.slice(0, 1950) + '\n...and more';
     }
 
     interaction.followUp({ content: messageContent, components: [row] });
