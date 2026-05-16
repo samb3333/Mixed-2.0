@@ -88,7 +88,7 @@ module.exports = {
 				await i.deferUpdate();
 				const confirmResult = await manager.confirmCheck(tournamentName, i.user.id);
 				if (!confirmResult) {
-					return i.followUp({ content: 'Failed to confirm, tournament already started.', ephemeral: true });
+					return i.followUp({ content: 'Error, check if the tournament has started, if not message a staff member.', ephemeral: true });
 				}
 
 				const originalRow = i.message.components[0] as ActionRow<ButtonComponent>;
