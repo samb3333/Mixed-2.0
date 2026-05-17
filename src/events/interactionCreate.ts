@@ -221,7 +221,7 @@ module.exports = {
 						const team = teamsManager.getTeam(tournamentName, results[1].name);
 						if (team) {
 							for (const user_id of team) {
-								messageContent += `<@${user_id}>`;
+								messageContent += `<@${user_id}> `;
 							}
 						}
 					}
@@ -230,7 +230,7 @@ module.exports = {
 						const team = teamsManager.getTeam(tournamentName, results[2].name);
 						if (team) {
 							for (const user_id of team) {
-								messageContent += `<@${user_id}>`;
+								messageContent += `<@${user_id}> `;
 							}
 						}
 					}
