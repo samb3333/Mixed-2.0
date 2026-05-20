@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { PartyManager } from '../../classes/PartyManager';
 import { Party } from '../../types';
+import { PlayerManager } from '../../classes/PlayerManager';
 
 const manager = PartyManager.getInstance()
 
@@ -43,6 +44,7 @@ module.exports = {
                 case 'create':
                     const r = manager.create(interaction.user.id)
                     if (r === 'already_in') return await interaction.editReply('You are already in a party, use /leave')
+                    if (r === 'not_registered') return await interaction.editReply('You need to register, use /link')
                     await interaction.editReply('Party created successfully!');
                     break;
 
@@ -72,6 +74,12 @@ module.exports = {
                     if (p.member) return await interaction.editReply('Your party is full, use /leave and make another one');
 
                     const player = interaction.options.getUser('player');
+
+                    if (!player) return;
+
+                    const hasLinked = PlayerManager.getInstance().isRegistered(player.id)
+
+                    if (!hasLinked) return await interaction.editReply('You need to register, use /link')
 
                     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
                         new ButtonBuilder()
