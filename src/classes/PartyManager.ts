@@ -2,6 +2,8 @@ import { Party } from '../types'
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { PlayerManager } from './PlayerManager';
+
 const DB_PATH = path.join(__dirname, '../../data/parties.json');
 
 export class PartyManager {
@@ -49,7 +51,8 @@ export class PartyManager {
         }
     }
 
-    public create(userId: string): Party | 'already_in' {
+    public create(userId: string): Party | 'already_in' | 'not_registered' {
+        if (!PlayerManager.getInstance().isRegistered(userId)) return 'not_registered'
         if (this.parties.has(userId)) return 'already_in';
         const party: Party = { leader: userId, member: null };
         this.parties.set(userId, party);
