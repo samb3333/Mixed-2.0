@@ -10,6 +10,9 @@ const players = PlayerManager.getInstance();
 import { TeamsManager } from '../classes/TeamsManager';
 const teamsManager = TeamsManager.getInstance();
 
+import { PartyManager } from '../classes/PartyManager';
+const partyManager = PartyManager.getInstance()
+
 const token = process.env.ODC as string;
 
 module.exports = {
@@ -58,7 +61,40 @@ module.exports = {
 			const [action, ...nameParts] = i.customId.split(':');
 			const tournamentName = nameParts.join(':');
 
-			if (action === 'tournament_join') {
+			if (action === 'party_join') {
+				await i.deferReply({ ephemeral: true });
+				const result = partyManager.invite(tournamentName, i.user.id)
+
+				if (result === 'complete') {
+					return i.editReply({ content: 'You have joined the party' });
+				} else if (result === 'full') {
+					return i.editReply({ content: 'The party is full' });
+				} else if (result === 'not_found') {
+					return i.editReply({ content: 'Error: party not found' });
+				}
+
+				const originalRow = i.message.components[0] as ActionRow<ButtonComponent>;
+
+				const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+				...originalRow.components.map(button =>
+					ButtonBuilder.from(button).setDisabled(true)
+				)
+				);
+
+				await i.update({ components: [disabledRow] });
+				return;
+			} else if (action === 'party_reject') {
+				const originalRow = i.message.components[0] as ActionRow<ButtonComponent>;
+
+				const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+				...originalRow.components.map(button =>
+					ButtonBuilder.from(button).setDisabled(true)
+				)
+				);
+
+				await i.update({ components: [disabledRow] });
+				return;
+			} else if (action === 'tournament_join') {
 				await i.deferReply({ ephemeral: true });
 				const result = manager.join(tournamentName, i.user.id);
 				if (result === 'already_in') {

@@ -43,3 +43,8 @@ export interface MatchRecord {
   threadId: string;
   completed: boolean;
 }
+
+export interface Party {
+  leader: string;
+  member: string | null;
+}
