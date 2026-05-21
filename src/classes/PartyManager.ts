@@ -54,7 +54,7 @@ export class PartyManager {
 
     public create(userId: string): Party | 'already_in' | 'not_registered' {
         if (!PlayerManager.getInstance().isRegistered(userId)) return 'not_registered'
-        if (this.parties.has(userId)) return 'already_in';
+        if (this.getParty(userId)) return 'already_in';
         const party: Party = { leader: userId, member: null };
         this.parties.set(userId, party);
         this.save();
