@@ -62,7 +62,7 @@ module.exports = {
 
                     let message = `### Party\n- Leader: <@${party.leader}>`
                     if (party.member) {
-                        message += `\n- Member: <@${party.member}`
+                        message += `\n- Member: <@${party.member}>`
                     }
                     await interaction.editReply(message);
                     break;
