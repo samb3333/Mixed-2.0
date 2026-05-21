@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { PlayerManager } from './PlayerManager';
+import { TournamentManager } from './TournamentManager';
 
 const DB_PATH = path.join(__dirname, '../../data/parties.json');
 
@@ -60,11 +61,13 @@ export class PartyManager {
         return party;
     }
 
-    public invite(leader: string, member: string): 'complete' | 'full' | 'not_found' {
+    public invite(leader: string, member: string): 'complete' | 'full' | 'not_found' | 'already_in' {
         const party = this.getParty(leader)
         if (!party) return 'not_found'
 
         if (party.member) return 'full'
+
+        if (this.getParty(member)) return 'already_in'
 
         party.member = member
         this.save()
@@ -91,11 +94,15 @@ export class PartyManager {
 
     public leave(userId: string): 'deleted' | 'left' | 'not_in' {
         const deleted = this.delete(userId);
-        if (deleted) return 'deleted'
-        
+        if (deleted)  {
+            TournamentManager.getInstance().removeParty(userId)
+            return'deleted'
+        };
+
         const party = this.getParty(userId);
         if (party) {
             party.member = null
+            TournamentManager.getInstance().removeParty(party.leader)
             this.save();
             return 'left'
         }

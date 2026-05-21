@@ -18,13 +18,18 @@ module.exports = {
     .addStringOption(option =>
       option.setName('name').setDescription('The name of the tournament').setRequired(true)
     )
+    .addBooleanOption(option =>
+      option.setName('party_only').setDescription('Party only tournament').setRequired(true)
+    )
     .setDefaultMemberPermissions(0),
 
   async execute(interaction: ChatInputCommandInteraction) {
     await interaction.deferReply({ ephemeral: false });
 
     const name = interaction.options.getString('name', true);
-    const result = manager.create(name);
+    const partyOnly = interaction.options.getBoolean('party_only', true);
+
+    const result = manager.create(name, partyOnly);
 
     if (result === 'already_exists') {
         await interaction.deleteReply();
