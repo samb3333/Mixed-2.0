@@ -405,28 +405,35 @@ export class TournamentManager {
     }
 
     const subs = allPlayers.slice(validCount);
-    const subsText = subs.length > 0 ? `\n\n**Substitutes (not assigned to teams):**\n${subs.map(id => `<@${id}>`).join(', ')}` : '';
+    //const subsText = subs.length > 0 ? `\n\n**Substitutes (not assigned to teams):**\n${subs.map(id => `<@${id}>`).join(', ')}` : '';
 
     let messageContent: string[] = [];
-    let content = `**${name}** Tournament Teams:\n`
+    let content = `**${name}** Tournament Teams:\n`;
+
     for (const [index, team] of teams.entries()) {
       const teamMembers = team.map(id => `<@${id}>`).join(' ');
-      content += `**Team ${index + 1}:** ${teamMembers}\n`;
-      if (content.length > 1500) {
-        messageContent.push(content);
-        content = '';
-      }
-    };
+      const line = `**Team ${index + 1}:** ${teamMembers}\n`;
 
-    messageContent.push(content);
+      if (content.length + line.length > 1900) {
+        messageContent.push(content);
+        content = line; // start new chunk with current line, not empty string
+      } else {
+        content += line;
+      }
+    }
+
+    if (content.trim()) messageContent.push(content); // only push if not empty
 
     for (const chunk of messageContent) {
-      await channel.send({ content: chunk });
+      if (chunk.trim()) await channel.send({ content: chunk }); // guard against empty chunks
     }
 
-    if (subsText) {
-      await channel.send(subsText);
-    }
+    // Fix subsText starting with \n\n
+    const subsText = subs.length > 0
+      ? `**Substitutes (not assigned to teams):**\n${subs.map(id => `<@${id}>`).join(', ')}`
+      : '';
+
+    if (subsText) await channel.send({ content: subsText });
 
     let payload = {
             "name": name,
