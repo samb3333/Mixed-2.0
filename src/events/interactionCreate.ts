@@ -125,25 +125,26 @@ module.exports = {
 				}
 				await i.editReply({ content: `You left **${tournamentName}**.` });
 			} else if (action === 'check') {
-				await i.deferReply();
-				const originalRow = i.message.components[0] as ActionRow<ButtonComponent>;
+				const confirmResult = await manager.confirmCheck(tournamentName, i.user.id);
 
+				if (!confirmResult) {
+				return i.update({ 
+					content: '❌ Error confirming — check if the tournament is active or message a staff member.',
+					components: [] // remove button on error too
+				});
+				}
+
+				const originalRow = i.message.components[0] as ActionRow<ButtonComponent>;
 				const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
 				...originalRow.components.map(button =>
 					ButtonBuilder.from(button).setDisabled(true)
 				)
 				);
 
-				i.message.edit({components: [disabledRow]})
-				
-				const confirmResult = await manager.confirmCheck(tournamentName, i.user.id);
-				if (!confirmResult) {
-					return i.editReply({ content: 'Error, check if the tournament has started, if not message a staff member.' });
-				}
-
-				await i.editReply({ content: `You confirmed your participation in **${tournamentName}**!` });
-				
-				return;
+				return i.update({ 
+				content: `✅ You confirmed your participation in **${tournamentName}**!`,
+				components: [disabledRow]
+				});
 			} else if (action === 'check_end') {
 				if (!i.memberPermissions?.has('Administrator')) {
 					return i.reply({ content: 'You do not have permission to end the activity check.', ephemeral: true });
