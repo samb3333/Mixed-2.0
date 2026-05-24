@@ -125,12 +125,7 @@ module.exports = {
 				}
 				await i.editReply({ content: `You left **${tournamentName}**.` });
 			} else if (action === 'check') {
-				await i.deferUpdate();
-				const confirmResult = await manager.confirmCheck(tournamentName, i.user.id);
-				if (!confirmResult) {
-					return i.followUp({ content: 'Error, check if the tournament has started, if not message a staff member.', ephemeral: true });
-				}
-
+				await i.deferReply();
 				const originalRow = i.message.components[0] as ActionRow<ButtonComponent>;
 
 				const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -139,7 +134,14 @@ module.exports = {
 				)
 				);
 
-				await i.message.edit({ content: `You confirmed your participation in **${tournamentName}**!`, components: [disabledRow] });
+				i.message.edit({components: [disabledRow]})
+				
+				const confirmResult = await manager.confirmCheck(tournamentName, i.user.id);
+				if (!confirmResult) {
+					return i.editReply({ content: 'Error, check if the tournament has started, if not message a staff member.' });
+				}
+
+				await i.editReply({ content: `You confirmed your participation in **${tournamentName}**!` });
 				
 				return;
 			} else if (action === 'check_end') {
