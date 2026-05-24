@@ -412,7 +412,7 @@ export class TournamentManager {
     for (const [index, team] of teams.entries()) {
       const teamMembers = team.map(id => `<@${id}>`).join(' ');
       content += `**Team ${index + 1}:** ${teamMembers}\n`;
-      if (content.length > 1900) {
+      if (content.length > 1500) {
         messageContent.push(content);
         content = '';
       }
