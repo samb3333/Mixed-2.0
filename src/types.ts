@@ -5,11 +5,13 @@ interface Person {
 export interface Tournament {
   name: string;
   participants: Set<string>;
+  partyOnly: boolean;
 }
 
 export interface TournamentJSON {
   name: string;
   participants: string[];
+  partyOnly: boolean;
 }
 
 export interface ActivityCheck {
@@ -42,4 +44,9 @@ export interface MatchRecord {
   matchId: string;
   threadId: string;
   completed: boolean;
+}
+
+export interface Party {
+  leader: string;
+  member: string | null;
 }

@@ -10,6 +10,9 @@ const players = PlayerManager.getInstance();
 import { TeamsManager } from '../classes/TeamsManager';
 const teamsManager = TeamsManager.getInstance();
 
+import { PartyManager } from '../classes/PartyManager';
+const partyManager = PartyManager.getInstance()
+
 const token = process.env.ODC as string;
 
 module.exports = {
@@ -58,7 +61,41 @@ module.exports = {
 			const [action, ...nameParts] = i.customId.split(':');
 			const tournamentName = nameParts.join(':');
 
-			if (action === 'tournament_join') {
+			if (action === 'party_join') {
+				const originalRow = i.message.components[0] as ActionRow<ButtonComponent>;
+
+				const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+				...originalRow.components.map(button =>
+					ButtonBuilder.from(button).setDisabled(true)
+				)
+				);
+
+				await i.update({ components: [disabledRow] });
+
+				const result = partyManager.invite(tournamentName, i.user.id)
+
+				if (result === 'complete') {
+					i.followUp({ content: 'You have joined the party' });
+				} else if (result === 'already_in') {
+					i.followUp({ content: 'You cannot be in 2 parties, use /leave' });
+				} else if (result === 'full') {
+					i.followUp({ content: 'The party is full' });
+				} else if (result === 'not_found') {
+					i.followUp({ content: 'Error: party not found, get them to re-invite you.' });
+				}
+				return;
+			} else if (action === 'party_reject') {
+				const originalRow = i.message.components[0] as ActionRow<ButtonComponent>;
+
+				const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+				...originalRow.components.map(button =>
+					ButtonBuilder.from(button).setDisabled(true)
+				)
+				);
+
+				await i.update({ components: [disabledRow] });
+				return;
+			} else if (action === 'tournament_join') {
 				await i.deferReply({ ephemeral: true });
 				const result = manager.join(tournamentName, i.user.id);
 				if (result === 'already_in') {
@@ -71,6 +108,9 @@ module.exports = {
 				return i.editReply({ 
 					content: 'You have not linked a username, contact a staff member to fix this.'
 				});
+				}
+				if (result === 'no_party') {
+				return i.editReply({ content: 'You are not in a full party!' });
 				}
 				await i.editReply({ content: `You joined **${tournamentName}**!` });
 
@@ -85,23 +125,26 @@ module.exports = {
 				}
 				await i.editReply({ content: `You left **${tournamentName}**.` });
 			} else if (action === 'check') {
-				await i.deferUpdate();
 				const confirmResult = await manager.confirmCheck(tournamentName, i.user.id);
+
 				if (!confirmResult) {
-					return i.followUp({ content: 'Error, check if the tournament has started, if not message a staff member.', ephemeral: true });
+				return i.update({ 
+					content: '❌ Error confirming — check if the tournament is active or message a staff member.',
+					components: [] // remove button on error too
+				});
 				}
 
 				const originalRow = i.message.components[0] as ActionRow<ButtonComponent>;
-
 				const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
 				...originalRow.components.map(button =>
 					ButtonBuilder.from(button).setDisabled(true)
 				)
 				);
 
-				await i.message.edit({ content: `You confirmed your participation in **${tournamentName}**!`, components: [disabledRow] });
-				
-				return;
+				return i.update({ 
+				content: `✅ You confirmed your participation in **${tournamentName}**!`,
+				components: [disabledRow]
+				});
 			} else if (action === 'check_end') {
 				if (!i.memberPermissions?.has('Administrator')) {
 					return i.reply({ content: 'You do not have permission to end the activity check.', ephemeral: true });
@@ -278,10 +321,24 @@ module.exports = {
 
 			// Update the signup embed with new participant list
 			const tournament = manager.get(tournamentName)!;
-			let memberList =
+
+			let memberList = ''
+
+			if (tournament.partyOnly) {
+				memberList = tournament.participants.size > 0
+				? [...tournament.participants].map(id => {
+					const party = partyManager.getParty(id);
+					const member = party ? party.member : null;
+					return member ? `<@${id}> & <@${member}>` : `<@${id}> (no party member)`;
+				}).join('\n')
+				: 'No one yet...';
+			} else {
+				memberList =
 				tournament.participants.size > 0
 				? [...tournament.participants].map(id => `<@${id}> (${players.get(id)?.username || 'Unknown'})`).join('\n')
 				: 'No one yet...';
+			}
+			
 
 			if (memberList.length > 4000) {
 				// If the member list exceeds Discord's embed field character limit, truncate it and add a note

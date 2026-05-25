@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { PlayerManager } from './PlayerManager';
 import { TeamsManager } from './TeamsManager';
+import { PartyManager } from './PartyManager';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, ChatInputCommandInteraction, Client, EmbedBuilder, TextChannel } from 'discord.js';
 import { client } from '..';
 
@@ -165,21 +166,32 @@ export class TournamentManager {
     }
   }
 
-  create(name: string): Tournament | 'already_exists' {
+  create(name: string, partyOnly: boolean): Tournament | 'already_exists' {
     if (this.tournaments.has(name)) return 'already_exists';
-    const tournament: Tournament = { name, participants: new Set() };
+    const tournament: Tournament = { name, participants: new Set() , partyOnly: partyOnly};
     this.tournaments.set(name, tournament);
     this.save();
     return tournament;
   }
 
-  join(name: string, userId: string): 'joined' | 'already_in' | 'not_found' | 'not_registered' {
+  join(name: string, userId: string): 'joined' | 'already_in' | 'not_found' | 'not_registered' | 'no_party' {
     const t = this.tournaments.get(name);
     if (!t) return 'not_found';
     if (t.participants.has(userId)) return 'already_in';
 
     const player = PlayerManager.getInstance().get(userId);
     if (!player) return 'not_registered';
+
+    if (t.partyOnly) {
+      const party = PartyManager.getInstance().getParty(userId);
+      if (!party || !party.member) return 'no_party'
+
+      if (t.participants.has(party.leader)) return 'already_in';
+
+      t.participants.add(party.leader)
+      this.save()
+      return 'joined'
+    }
 
     t.participants.add(userId);
     this.save();
@@ -189,10 +201,31 @@ export class TournamentManager {
   leave(name: string, userId: string): 'left' | 'not_in' | 'not_found' {
     const t = this.tournaments.get(name);
     if (!t) return 'not_found';
+
+    if (t.partyOnly) {
+      const party = PartyManager.getInstance().getParty(userId);
+      if (!party || !party.member) return 'not_in'
+
+      if (!t.participants.has(party.leader)) return 'not_in';
+
+      t.participants.delete(party.leader)
+      this.save()
+      return 'left'
+    }
+
     if (!t.participants.has(userId)) return 'not_in';
     t.participants.delete(userId);
     this.save();
     return 'left';
+  }
+
+  removeParty(leaderId: string): void {
+    for (const t of this.tournaments.values()) {
+      if (t.partyOnly && t.participants.has(leaderId)) {
+        t.participants.delete(leaderId);
+      }
+    }
+    this.save();
   }
 
   get(name: string): Tournament | undefined {
@@ -235,20 +268,86 @@ export class TournamentManager {
     return teams;
   }
 
+  partyTeamAssignment(memberIds: string[], teamSize: number): string[][] {
+    const partyManager = PartyManager.getInstance();
+    const playerManager = PlayerManager.getInstance();
+
+    const getPartyMMR = (leaderId: string): number => {
+      const leaderMMR = playerManager.get(leaderId)?.mmr ?? 1000;
+      const party = partyManager.getParty(leaderId);
+      const memberMMR = party && party.member ? playerManager.get(party.member)?.mmr ?? 1000 : 1000;
+      return leaderMMR + memberMMR;
+    };
+
+    const sorted = [...memberIds].sort((a, b) => {
+      return getPartyMMR(b) - getPartyMMR(a);
+    });
+
+    const partiesPerTeam = teamSize / 2
+    const teamCount = Math.floor(memberIds.length / partiesPerTeam);
+    const teams: string[][] = Array.from({ length: teamCount }, () => []);
+
+    let index = 0;
+    let goingRight = true;
+
+    for (const id of sorted) {
+      teams[index].push(id);
+
+      const party = partyManager.getParty(id);
+      if (party) {
+        if (party.member) teams[index].push(party.member);
+      }
+      
+      if (goingRight) {
+        if (index === teamCount - 1) {
+          goingRight = false; // hit the right end, reverse
+        } else {
+          index++;
+        }
+      } else {
+        if (index === 0) {
+          goingRight = true; // hit the left end, reverse
+        } else {
+          index--;
+        }
+      }
+    }
+
+    return teams;
+  }
+
   createTeams(interaction: ChatInputCommandInteraction, name: string): boolean {
     const t = this.tournaments.get(name);
     if (!t) return false;
 
     const team_size = 4;
     const allPlayers = [...t.participants];
-    const validCount = Math.floor(allPlayers.length / team_size) * team_size;
-    const activePlayers = allPlayers.slice(0, validCount);
 
-    const teams = this.greedyTeamAssignment(activePlayers, team_size);
+    let teams: string[][]
+
+    if (!t.partyOnly) {
+      const validCount = Math.floor(allPlayers.length / team_size) * team_size;
+      const activePlayers = allPlayers.slice(0, validCount);
+
+      teams = this.greedyTeamAssignment(activePlayers, team_size);
+
+    } else {
+      let validCount: number
+      if (allPlayers.length % 2 === 0) {
+        validCount = allPlayers.length
+      } else {
+        validCount = allPlayers.length - 1
+      }
+      
+      const activePlayers = allPlayers.slice(0, validCount);
+
+      teams = this.partyTeamAssignment(activePlayers, team_size);
+    }
+    
 
     let messageContent = `**${name}** Tournament has started!\n`;
     teams.forEach((team, index) => {
-      const teamMembers = team.map(id => `<@${id}>`).join(', ');
+      const teamMembers = team.map(id => `<@${id}>`).join(' ');
       const avgMMR = Math.round(team.reduce((sum, id) => sum + (PlayerManager.getInstance().get(id)?.mmr ?? 1000), 0) / team.length);
       messageContent += `**Team ${index + 1}:** ${teamMembers} (${avgMMR})\n`;
     });
@@ -276,30 +375,65 @@ export class TournamentManager {
 
     const team_size = 4;
     const allPlayers = [...t.participants];
-    const validCount = Math.floor(allPlayers.length / team_size) * team_size;
-    const activePlayers = allPlayers.slice(0, validCount);
-    const subs = allPlayers.slice(validCount);
-    const subsText = subs.length > 0 ? `\n\n**Substitutes (not assigned to teams):**\n${subs.map(id => `<@${id}>`).join(', ')}` : '';
+    
+    // const validCount = Math.floor(allPlayers.length / team_size) * team_size;
+    // const activePlayers = allPlayers.slice(0, validCount);
 
-    const teams = this.greedyTeamAssignment(activePlayers, team_size);
+    // const teams = this.greedyTeamAssignment(activePlayers, team_size);
+
+    let validCount: number
+
+    let teams: string[][]
+
+    if (!t.partyOnly) {
+      validCount = Math.floor(allPlayers.length / team_size) * team_size;
+      const activePlayers = allPlayers.slice(0, validCount);
+
+      teams = this.greedyTeamAssignment(activePlayers, team_size);
+
+    } else {
+      
+      if (allPlayers.length % 2 === 0) {
+        validCount = allPlayers.length
+      } else {
+        validCount = allPlayers.length - 1
+      }
+      
+      const activePlayers = allPlayers.slice(0, validCount);
+
+      teams = this.partyTeamAssignment(activePlayers, team_size);
+    }
+
+    const subs = allPlayers.slice(validCount);
+    //const subsText = subs.length > 0 ? `\n\n**Substitutes (not assigned to teams):**\n${subs.map(id => `<@${id}>`).join(', ')}` : '';
 
     let messageContent: string[] = [];
-    let content = `**${name}** Tournament Teams:\n`
-    for (const [index, team] of teams.entries()) {
-      const teamMembers = team.map(id => `<@${id}>`).join(', ');
-      content += `**Team ${index + 1}:** ${teamMembers}\n`;
-      if (content.length > 1900) {
-        messageContent.push(content);
-        content = '';
-      }
-    };
+    let content = `**${name}** Tournament Teams:\n`;
 
-    messageContent.push(content);
+    for (const [index, team] of teams.entries()) {
+      const teamMembers = team.map(id => `<@${id}>`).join(' ');
+      const line = `**Team ${index + 1}:** ${teamMembers}\n`;
+
+      if (content.length + line.length > 1900) {
+        messageContent.push(content);
+        content = line; // start new chunk with current line, not empty string
+      } else {
+        content += line;
+      }
+    }
+
+    if (content.trim()) messageContent.push(content); // only push if not empty
 
     for (const chunk of messageContent) {
-      await channel.send({ content: chunk });
+      if (chunk.trim()) await channel.send({ content: chunk }); // guard against empty chunks
     }
-    await channel.send(subsText);
+
+    // Fix subsText starting with \n\n
+    const subsText = subs.length > 0
+      ? `**Substitutes (not assigned to teams):**\n${subs.map(id => `<@${id}>`).join(', ')}`
+      : '';
+
+    if (subsText) await channel.send({ content: subsText });
 
     let payload = {
             "name": name,
