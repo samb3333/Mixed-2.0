@@ -272,4 +272,39 @@ export class TeamsManager {
     if (deleted) this.save();
     return deleted;
   }
+
+  async updateServers(tournamentName: string, serverID: string): Promise<boolean> {
+    const tournament = this.getTournament(tournamentName)
+    if (!tournament || !tournament.odcTournamentId) return false;
+
+    const res = await fetch(
+        `https://tournament.oriondriftcompetitive.com/api/tournaments/${tournament.odcTournamentId}`
+      );
+
+    const tournamentData = await res.json()
+    if (!tournamentData) return false;
+
+    if (!tournamentData.data.stationIDs) return false;
+
+    let IDs: string[] = tournamentData.data.stationIDs
+    IDs.push(serverID)
+
+    let payload = {
+            "stationIDs": IDs
+        }
+
+    const token = process.env.ODC as string;
+    const response = await fetch(`https://tournament.oriondriftcompetitive.com/api/tournaments/${tournament.odcTournamentId}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': token,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await response.json()
+
+    return true;
+  }
 }
