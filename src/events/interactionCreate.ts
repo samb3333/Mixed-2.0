@@ -96,7 +96,13 @@ module.exports = {
 				await i.update({ components: [disabledRow] });
 				return;
 			} else if (action === 'tournament_join') {
-				await i.deferReply({ ephemeral: true });
+				try {
+					await i.deferReply({ ephemeral: true });
+				} catch (error) {
+					console.error("Failed to defer interaction within 3 seconds:", error);
+					return;
+				}
+				//await i.deferReply({ ephemeral: true });
 				const result = manager.join(tournamentName, i.user.id);
 				if (result === 'already_in') {
 				return i.editReply({ content: 'You are already in this tournament!' });
@@ -115,7 +121,13 @@ module.exports = {
 				await i.editReply({ content: `You joined **${tournamentName}**!` });
 
 			} else if (action === 'tournament_leave') {
-				await i.deferReply({ ephemeral: true });
+				try {
+					await i.deferReply({ ephemeral: true });
+				} catch (error) {
+					console.error("Failed to defer interaction within 3 seconds:", error);
+					return;
+				}
+				//await i.deferReply({ ephemeral: true });
 				const result = manager.leave(tournamentName, i.user.id);
 				if (result === 'not_in') {
 				return i.editReply({ content: "You aren't in this tournament." });
