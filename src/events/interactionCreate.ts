@@ -153,10 +153,25 @@ module.exports = {
 				)
 				);
 
-				return i.update({ 
-				content: `✅ You confirmed your participation in **${tournamentName}**!`,
-				components: [disabledRow]
+				try {
+				return await i.update({ 
+					content: `✅ You confirmed your participation in **${tournamentName}**!`,
+					components: [disabledRow]
 				});
+				} catch (err: any) {
+					if (err.code === 10062) {
+						// Interaction expired, edit the message directly instead
+						try {
+						await i.message.edit({
+							content: `✅ You confirmed your participation in **${tournamentName}**!`,
+							components: [disabledRow]
+						});
+						} catch {
+						// Message was also deleted, nothing we can do
+						}
+					}
+				}
+				return;
 			} else if (action === 'check_end') {
 				if (!i.memberPermissions?.has('Administrator')) {
 					return i.reply({ content: 'You do not have permission to end the activity check.', ephemeral: true });
