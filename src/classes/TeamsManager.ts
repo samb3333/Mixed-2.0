@@ -17,6 +17,7 @@ export class TeamsManager {
   private constructor() {
     this.load();
     this.loadPostedMatches();
+    this.startPolling();
   }
 
   static getInstance(): TeamsManager {
@@ -39,7 +40,6 @@ export class TeamsManager {
         this.data.set(t.tournamentName, t);
       }
       console.log(`Loaded ${this.data.size} odc tournaments(s) from disk`);
-      this.startPolling();
     } catch (err) {
       console.error('Failed to load teams:', err);
     }
