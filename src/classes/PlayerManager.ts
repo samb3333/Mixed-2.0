@@ -84,4 +84,8 @@ export class PlayerManager {
   isRegistered(userId: string): boolean {
     return this.players.has(userId);
   }
+
+  getAll(): Player[] {
+    return [...this.players.values()];
+  }
 }

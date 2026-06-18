@@ -397,22 +397,32 @@ module.exports = {
 				const username = i.fields.getTextInputValue('username');
 				const region = i.fields.getStringSelectValues('region')[0] as Region;
 
-				if (players.isRegistered(i.user.id)) {
-					return i.reply({ content: '⚠️ You are already registered!', ephemeral: true });
-				}
+				// if (players.isRegistered(i.user.id)) {
+				// 	return i.reply({ content: '⚠️ You are already registered!', ephemeral: true });
+				// }
 
 				// Validate region
 				const roleId = REGION_ROLES[region];
 				if (!roleId) {
-				return i.reply({
-					content: 'Invalid region. Please enter EU or NA',
-					ephemeral: true,
-				});
+					return i.reply({
+						content: 'Invalid region. Please enter EU or NA',
+						ephemeral: true,
+					});
 				}
 
 				// Assign role
 				const member = await i.guild?.members.fetch(i.user.id);
 				if (!member) return;
+				
+				try {
+					await member.setNickname(username);
+				} catch (err) {
+					console.error(err);
+					return i.reply({
+						content: '⚠️ Failed to assign role. Please contact a staff member.',
+						ephemeral: true,
+					});
+				}
 
 				try {
 					await member.roles.add(roleId);
