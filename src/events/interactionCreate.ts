@@ -264,6 +264,7 @@ module.exports = {
 					`https://api.challonge.com/v1/tournaments/${data.data.challongeTournamentId}/participants.json?api_key=${process.env.CHALLONGE}`
 				);
 				const participants = await participantsResult.json();
+				console.log('Challonge participants response:', JSON.stringify(participants));
 
 				if (channel && channel.isTextBased() && participants) {
 					const results = participants
