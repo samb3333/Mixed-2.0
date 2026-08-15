@@ -102,6 +102,17 @@ export class TeamsManager {
     return Math.round(k * (result - expected));
   }
 
+  /** Fetches a channel/thread, returning null instead of throwing when it's gone (10003). */
+  private async fetchChannel(id: string) {
+    if (!id) return null;
+    try {
+      return await client.channels.fetch(id);
+    } catch (err: any) {
+      if (err?.code === 10003 || err?.status === 404) return null;
+      throw err;
+    }
+  }
+
   private async checkGames(tournament: TournamentTeams): Promise<void> {
     try {
       const res = await fetch(
@@ -114,74 +125,80 @@ export class TeamsManager {
         return;
       }
       for (const match of matches.data.matches) {
+        try {
+          const record = this.postedMatches.get(match);
+          if (!record) {
+            const res = await fetch(
+              `https://tournament.oriondriftcompetitive.com/api/matches/${match}`
+            );
+            const currentMatch = await res.json();
+            if (!currentMatch.data) continue;
+            if (currentMatch.data.status === 'scheduled') {
+              console.log(`${currentMatch.data.home.name} vs ${currentMatch.data.away.name}`);
+              console.log(`${currentMatch.data.stationName} ${currentMatch.data.arena} ${tournament.odcTournamentId}`);
 
-        const record = this.postedMatches.get(match);
-        if (!record) {
-          const res = await fetch(
-            `https://tournament.oriondriftcompetitive.com/api/matches/${match}`
-          );
-          const currentMatch = await res.json();
-          if (!currentMatch.data) continue;
-          if (currentMatch.data.status === 'scheduled') {
-            console.log(`${currentMatch.data.home.name} vs ${currentMatch.data.away.name}`);
-            console.log(`${currentMatch.data.stationName} ${currentMatch.data.arena} ${tournament.odcTournamentId}`);
+              const channel = await this.fetchChannel(process.env.MatchesChannelID as string) as TextChannel | null;
+              if (!channel || !channel.isTextBased()) {
+                console.error('Matches channel not found!');
+                continue;
+              }
 
-            const channel = await client.channels.fetch(process.env.MatchesChannelID as string) as TextChannel;
-            if (!channel || !channel.isTextBased()) {
-              console.error('Matches channel not found!');
-              return;
-            }
+              const thread = await channel.threads.create({
+                name: `Round: ${currentMatch.data.round} - ${currentMatch.data.home.name} vs ${currentMatch.data.away.name}`,
+                type: ChannelType.PrivateThread,
+                invitable: false,
+                autoArchiveDuration: ThreadAutoArchiveDuration.OneHour,
+              });
 
-            const thread = await channel.threads.create({
-              name: `Round: ${currentMatch.data.round} - ${currentMatch.data.home.name} vs ${currentMatch.data.away.name}`,
-              type: ChannelType.PrivateThread,
-              invitable: false,
-              autoArchiveDuration: ThreadAutoArchiveDuration.OneHour,
-            });
+              await thread.send(`Round: ${currentMatch.data.round} - ${currentMatch.data.home.name} vs ${currentMatch.data.away.name}`)
 
-            await thread.send(`Round: ${currentMatch.data.round} - ${currentMatch.data.home.name} vs ${currentMatch.data.away.name}`)
+              let message = `## Station: ${currentMatch.data.stationName}\n ### Arena: ${currentMatch.data.arena}\n ### Best of ${currentMatch.data.bestOf}\n`
 
-            let message = `## Station: ${currentMatch.data.stationName}\n ### Arena: ${currentMatch.data.arena}\n ### Best of ${currentMatch.data.bestOf}\n`
+              message += "\n"
+              message += "\n"
+              for (const user_id of this.getTeam(tournament.tournamentName, currentMatch.data.home.name) || []) {
+                message += `<@${user_id}> `;
+              }
 
-            message += "\n"
-            message += "\n"
-            for (const user_id of this.getTeam(tournament.tournamentName, currentMatch.data.home.name) || []) {
-              message += `<@${user_id}> `;
-            }
+              message += "vs ";
 
-            message += "vs ";
-
-            for (const user_id of this.getTeam(tournament.tournamentName, currentMatch.data.away.name) || []) {
+              for (const user_id of this.getTeam(tournament.tournamentName, currentMatch.data.away.name) || []) {
                 message += `<@${user_id}> `
+              }
+
+              await thread.send(message);
+
+              this.postedMatches.set(match, {
+                matchId: match,
+                threadId: thread.id,
+                completed: false,
+              });
+              this.savePostedMatches();
             }
-
-            await thread.send(message);
-
-            this.postedMatches.set(match, {
-              matchId: match,
-              threadId: thread.id,
-              completed: false,
-            });
-            this.savePostedMatches();
           }
-        }
-        else if (record && !record.completed) {
-          const res = await fetch(
-            `https://tournament.oriondriftcompetitive.com/api/matches/${match}`
-          );
-          const currentMatch = await res.json();
+          else if (record && !record.completed) {
+            const res = await fetch(
+              `https://tournament.oriondriftcompetitive.com/api/matches/${match}`
+            );
+            const currentMatch = await res.json();
+            if (!currentMatch.data) continue;
 
-          if (currentMatch.data.status === 'completed') {
-            const thread = await client.channels.fetch(record.threadId) as ThreadChannel;
-            
-            if (thread && thread.isTextBased()) {
+            if (currentMatch.data.status === 'completed') {
+              const thread = await this.fetchChannel(record.threadId) as ThreadChannel | null;
 
               let message = `### ${currentMatch.data.home.name} ${currentMatch.data.home.score} - ${currentMatch.data.away.score} ${currentMatch.data.away.name}`;
               currentMatch.data.matchScores.forEach((score: any, index: number) => {
-                  const round = index + 1;
-                  message += `\nRound ${round}: ${score.home} - ${score.away}`;
+                const round = index + 1;
+                message += `\nRound ${round}: ${score.home} - ${score.away}`;
               });
-              await thread.send(message);
+
+              if (thread && thread.isTextBased()) {
+                await thread.send(message);
+              } else {
+                // Thread was deleted or is no longer reachable. Score the match anyway so
+                // the record settles instead of being retried on every poll.
+                console.error(`Thread ${record.threadId} not found for completed match ${match}, scoring without it`);
+              }
 
               console.log(`${currentMatch.data.home.name} ${currentMatch.data.home.score} - ${currentMatch.data.away.score} ${currentMatch.data.away.name}`);
               record.completed = true;
@@ -207,10 +224,10 @@ export class TeamsManager {
                 return sum + (player ? player.mmr : 1000);
               }, 0) / losers.length;
 
-              let multiplier = 4 *currentMatch.data.bestOf + 12
-                if (currentMatch.data.round < 0) {
-                  multiplier = multiplier * 0.75
-                }
+              let multiplier = 4 * currentMatch.data.bestOf + 12
+              if (currentMatch.data.round < 0) {
+                multiplier = multiplier * 0.75
+              }
 
               for (const userId of winners) {
                 const player = PlayerManager.getInstance().get(userId);
@@ -229,11 +246,11 @@ export class TeamsManager {
               }
 
               this.savePostedMatches();
-            } else {
-              console.error(`Thread ${record.threadId} not found for completed match ${match}`);
             }
           }
-        }   
+        } catch (err) {
+          console.error(`Failed to process match ${match} for ${tournament.tournamentName}:`, err);
+        }
       }
     } catch (err) {
       console.error(`Failed to check games for ${tournament.tournamentName}:`, err);
