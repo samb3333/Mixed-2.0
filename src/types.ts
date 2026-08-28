@@ -21,11 +21,12 @@ export interface ActivityCheck {
   notConfirmed: Set<string>;
 }
 
-export type Region = 'EU' | 'NA';
+export type Region = 'EU' | 'NA' | 'OCE';
 
 export const REGION_ROLES: Record<Region, string> = {
   EU:   process.env.EUroleID as string || '0',
   NA:   process.env.NAroleID as string || '0',
+  OCE:  process.env.OCEroleID as string || '0',
 };
 
 export interface Player {
