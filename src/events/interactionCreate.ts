@@ -52,7 +52,7 @@ module.exports = {
 						new StringSelectMenuOptionBuilder()
 						.setLabel('OCE')
 						.setValue('OCE')
-						.setEmoji('🌏')
+						.setEmoji('🇦🇺')
 					)
 				);
 
