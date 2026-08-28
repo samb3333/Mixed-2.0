@@ -35,7 +35,7 @@ module.exports = {
 				.setMaxLength(32);
 
 				const regionInput = new LabelBuilder()
-				.setLabel('Your region (EU / NA)')
+				.setLabel('Your region (EU / NA / OCE)')
 				.setStringSelectMenuComponent(
 					new StringSelectMenuBuilder()
 					.setCustomId('region')
@@ -48,7 +48,11 @@ module.exports = {
 						new StringSelectMenuOptionBuilder()
 						.setLabel('NA')
 						.setValue('NA')
-						.setEmoji('🇺🇸')
+						.setEmoji('🇺🇸'),
+						new StringSelectMenuOptionBuilder()
+						.setLabel('OCE')
+						.setValue('OCE')
+						.setEmoji('🌏')
 					)
 				);
 
@@ -406,7 +410,7 @@ module.exports = {
 				const roleId = REGION_ROLES[region];
 				if (!roleId) {
 					return i.reply({
-						content: 'Invalid region. Please enter EU or NA',
+						content: 'Invalid region. Please enter EU, NA, or OCE',
 						ephemeral: true,
 					});
 				}
