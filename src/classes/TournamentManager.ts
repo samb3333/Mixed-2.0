@@ -4,6 +4,7 @@ import * as path from 'path';
 import { PlayerManager } from './PlayerManager';
 import { TeamsManager } from './TeamsManager';
 import { PartyManager } from './PartyManager';
+import { hasOdcAccount } from './OdcApi';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, ChatInputCommandInteraction, Client, EmbedBuilder, TextChannel } from 'discord.js';
 import { client } from '..';
 
@@ -174,13 +175,13 @@ export class TournamentManager {
     return tournament;
   }
 
-  join(name: string, userId: string): 'joined' | 'already_in' | 'not_found' | 'not_registered' | 'no_party' {
+  async join(name: string, userId: string): Promise<'joined' | 'already_in' | 'not_found' | 'not_registered' | 'no_party'> {
     const t = this.tournaments.get(name);
     if (!t) return 'not_found';
     if (t.participants.has(userId)) return 'already_in';
 
-    const player = PlayerManager.getInstance().get(userId);
-    if (!player) return 'not_registered';
+    const hasAccount = await hasOdcAccount(userId);
+    if (!hasAccount) return 'not_registered';
 
     if (t.partyOnly) {
       const party = PartyManager.getInstance().getParty(userId);

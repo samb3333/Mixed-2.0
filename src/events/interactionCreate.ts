@@ -13,6 +13,10 @@ const teamsManager = TeamsManager.getInstance();
 import { PartyManager } from '../classes/PartyManager';
 const partyManager = PartyManager.getInstance()
 
+import { hasOdcAccount } from '../classes/OdcApi';
+
+const ODC_SIGNUP_URL = 'https://oriondriftcompetitive.com';
+
 const token = process.env.ODC as string;
 
 module.exports = {
@@ -22,6 +26,14 @@ module.exports = {
 			const i = interaction as ButtonInteraction;
 			// handle button interaction here
 			if (i.customId === 'open_registration') {
+				const hasAccount = await hasOdcAccount(i.user.id);
+				if (!hasAccount) {
+					return i.reply({
+						content: `You need an account on our site before you can register. Create one at ${ODC_SIGNUP_URL} and then click **Register** again.`,
+						ephemeral: true,
+					});
+				}
+
 				const modal = new ModalBuilder()
 				.setCustomId('registration_modal')
 				.setTitle('Server Registration');
@@ -107,7 +119,7 @@ module.exports = {
 					return;
 				}
 				//await i.deferReply({ ephemeral: true });
-				const result = manager.join(tournamentName, i.user.id);
+				const result = await manager.join(tournamentName, i.user.id);
 				if (result === 'already_in') {
 				return i.editReply({ content: 'You are already in this tournament!' });
 				}
@@ -115,8 +127,8 @@ module.exports = {
 				return i.editReply({ content: 'Tournament already started.' });
 				}
 				if (result === 'not_registered') {
-				return i.editReply({ 
-					content: 'You have not linked a username, contact a staff member to fix this.'
+				return i.editReply({
+					content: `You need an account on our site before you can join tournaments. Create one at ${ODC_SIGNUP_URL} and then try again.`
 				});
 				}
 				if (result === 'no_party') {
@@ -431,7 +443,8 @@ module.exports = {
 
 				try {
 					await member.roles.add(roleId);
-					players.register(i.user.id, username);
+					// Usernames now come from the ODC API by Discord ID, so we no longer store one locally.
+					players.register(i.user.id, '');
 					return i.reply({
 						content: `Welcome **${username}**! You've been given the **${region}** role.`,
 						ephemeral: true,
