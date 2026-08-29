@@ -37,8 +37,9 @@ export interface Player {
 
 export interface TournamentTeams {
   tournamentName: string;
-  odcTournamentId?: string;
-  teams: Record<string, string[]>; // { 'Team 1': ['id1', 'id2', ...] }
+  odcTournamentId: string;
+  teams: Record<string, string[]>; // odcParticipantId -> discord user ids
+  teamNames: Record<string, string>; // odcParticipantId -> display name
 }
 
 export interface MatchRecord {

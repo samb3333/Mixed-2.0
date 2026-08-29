@@ -4,7 +4,7 @@ import * as path from 'path';
 import { PlayerManager } from './PlayerManager';
 import { TeamsManager } from './TeamsManager';
 import { PartyManager } from './PartyManager';
-import { hasOdcAccount } from './OdcApi';
+import { hasOdcAccount, getOdcUsersByDiscordIds, createTournament, createOneOffTeam, generateBracket } from './OdcApi';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, ChatInputCommandInteraction, Client, EmbedBuilder, TextChannel } from 'discord.js';
 import { client } from '..';
 
@@ -436,80 +436,86 @@ export class TournamentManager {
 
     if (subsText) await channel.send({ content: subsText });
 
-    let payload = {
-            "name": name,
-            "region": "EU",
-            "startTime": new Date().toISOString().replace(/\.\d{3}Z$/, '.000Z'),
-            "maxTeams": 64,
-            "createChallongeBracket": true,
-            "stationIDs": ["n"],
-            "arenas": ["gamma 01","beta 01","gamma 02","beta 02","gamma 03","beta 03"],
-            "checkInsEnabled": false,
-            "bestOf": 3,
-            "bestOfSemifinals": 5,
-            "bestOfLosersFinals": 5,
-            "bestOfFinals": 7
-        }
-
-    const token = process.env.ODC as string;
-    const response = await fetch('https://tournament.oriondriftcompetitive.com/api/tournaments', {
-      method: 'POST',
-      headers: {
-        'Authorization': token,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
-
-    const data = await response.json();
-
-    channel.send(`**Tournament started on Challonge:** https://challonge.com/${data.data.challongeTournamentId}`);
-
-    console.log(data);
-
-    const teamData: Record<string, any[]> = {};
-    teams.forEach((members, i) => {
-      teamData[`Team ${i + 1}`] = members;
-    });
-    //console.log(teamData);
-
-    // make odc teams
-    const metas = PlayerManager.getInstance()
-
-    for (const [teamName, members] of Object.entries(teamData)) {
-      console.log(teamName);
-
-      const payload = {
-        name: teamName,
-        tournamentId: `${data.data.id}`,
-        captainInGameName: metas.get(members[0])?.username ?? 'n',
-        additionalPlayers: members.slice(1).map(p => ({
-          inGameName: metas.get(p)?.username ?? 'n',
-          discordId: 'n',
-        })),
-      };
-
-      const currentTeam = await fetch('https://tournament.oriondriftcompetitive.com/api/teams/register', {
-        method: 'POST',
-        headers: {
-          'Authorization': token,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const currentTeamData = await currentTeam.json();
-      console.log(currentTeam.status, currentTeamData);
+    if (teams.length === 0) {
+      await channel.send('Not enough players to form any teams.');
+      return false;
     }
 
-    TeamsManager.getInstance().createTournament(name, teamData, data.data.id);
+    const odcUsers = await getOdcUsersByDiscordIds([...new Set(teams.flat())]);
+    const odcIdByDiscordId = new Map(odcUsers.map(u => [u.discordId, u.id]));
+
+    const tournament = await createTournament({
+      name,
+      region: 'EU',
+      type: 'community',
+      format: 'double',
+      signupType: 'admin_only',
+      startsAt: new Date().toISOString(),
+      gameConfig: {
+        fleetId: process.env.FLEET_ID || 'bd6946d4-1853-4a3b-9f57-3be2ddc7d67c',
+        arenas: ['gamma 01', 'beta 01', 'gamma 02', 'beta 02', 'gamma 03', 'beta 03'],
+      },
+      settings: {
+        bestOf: 3,
+        bestOfOverrides: {
+          winnersSemi: 5,
+          winnersFinal: 7,
+          losersFinal: 5,
+        },
+        maxTeams: Math.max(teams.length, 2),
+      },
+    });
+
+    if (!tournament) {
+      await channel.send('⚠️ Failed to create the tournament on ODC.');
+      return false;
+    }
+
+    // make odc one-off teams, keyed by the participant ID ODC hands back
+    const teamsData: Record<string, string[]> = {};
+    const teamNames: Record<string, string> = {};
+
+    for (const [index, members] of teams.entries()) {
+      const teamName = `Team ${index + 1}`;
+
+      const odcUserIds = members
+        .map(discordId => odcIdByDiscordId.get(discordId))
+        .filter((id): id is string => Boolean(id));
+
+      if (odcUserIds.length === 0) {
+        console.error(`Skipping ${teamName} in ${name}, none of its members have ODC accounts`);
+        await channel.send(`⚠️ Could not register **${teamName}** on ODC — none of its members have an ODC account.`);
+        continue;
+      }
+
+      if (odcUserIds.length !== members.length) {
+        console.warn(`${teamName} in ${name} has member(s) with no ODC account, they'll be missing from the roster on ODC`);
+      }
+
+      const participant = await createOneOffTeam(tournament._id, teamName, odcUserIds);
+      if (!participant) {
+        console.error(`Failed to create one-off team ${teamName} for ${name} on ODC`);
+        await channel.send(`⚠️ Failed to register **${teamName}** on ODC.`);
+        continue;
+      }
+
+      teamsData[participant._id] = members;
+      teamNames[participant._id] = teamName;
+    }
+
+    const generated = await generateBracket(tournament._id);
+    if (!generated) {
+      await channel.send('⚠️ Teams were registered, but generating the bracket failed. Check ODC and generate it manually.');
+    }
+
+    TeamsManager.getInstance().createTournament(name, teamsData, teamNames, tournament._id);
 
     this.delete(name); // remove tournament from our system since it's now in Teams
 
     const guildID = process.env.GUILD_ID as string;
     const guild = client.guilds.cache.get(guildID);
     if (!guild) throw new Error('Guild not found');
-    
+
     const configChannel = await guild.channels.create({
         name: `${name.toLowerCase().replace(/\s+/g, '-')}-config`,
         type: ChannelType.GuildText,
@@ -539,8 +545,7 @@ export class TournamentManager {
                 .setEmoji('🗑️')
         );
 
-    await configChannel.send( { content: `Tournament configuration panel https://challonge.com/${data.data.challongeTournamentId}\n`, components: [row] });
-    await configChannel.send(data.data.id);
+    await configChannel.send({ content: `Tournament configuration panel — ODC tournament ID: \`${tournament._id}\`\n`, components: [row] });
 
     return true;
   }
