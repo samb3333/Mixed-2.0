@@ -6,12 +6,14 @@ export interface Tournament {
   name: string;
   participants: Set<string>;
   partyOnly: boolean;
+  region: Region;
 }
 
 export interface TournamentJSON {
   name: string;
   participants: string[];
   partyOnly: boolean;
+  region: Region;
 }
 
 export interface ActivityCheck {

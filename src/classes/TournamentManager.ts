@@ -1,4 +1,4 @@
-import { Tournament, TournamentJSON , ActivityCheck} from '../types';
+import { Tournament, TournamentJSON, ActivityCheck, Region } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PlayerManager } from './PlayerManager';
@@ -39,9 +39,11 @@ export class TournamentManager {
         return;
       }
       for (const t of parsed) {
+        // Tournaments created before regions were tracked won't have one on disk.
         this.tournaments.set(t.name, {
           ...t,
           participants: new Set(t.participants),
+          region: t.region ?? 'EU',
         });
       }
       console.log(`Loaded ${this.tournaments.size} tournament(s) from disk`);
@@ -167,9 +169,9 @@ export class TournamentManager {
     }
   }
 
-  create(name: string, partyOnly: boolean): Tournament | 'already_exists' {
+  create(name: string, partyOnly: boolean, region: Region): Tournament | 'already_exists' {
     if (this.tournaments.has(name)) return 'already_exists';
-    const tournament: Tournament = { name, participants: new Set() , partyOnly: partyOnly};
+    const tournament: Tournament = { name, participants: new Set(), partyOnly, region };
     this.tournaments.set(name, tournament);
     this.save();
     return tournament;
@@ -446,13 +448,13 @@ export class TournamentManager {
 
     const tournament = await createTournament({
       name,
-      region: 'EU',
+      region: t.region,
       type: 'community',
       format: 'double',
       signupType: 'admin_only',
       startsAt: new Date().toISOString(),
       gameConfig: {
-        fleetId: process.env.FLEET_ID || 'bd6946d4-1853-4a3b-9f57-3be2ddc7d67c',
+        fleetId: process.env.FLEET_ID || 'd6c19ade-cab3-4a4d-9602-42af00ca56e6',
         arenas: ['gamma 01', 'beta 01', 'gamma 02', 'beta 02', 'gamma 03', 'beta 03'],
       },
       settings: {
