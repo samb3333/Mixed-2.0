@@ -454,7 +454,7 @@ export class TournamentManager {
       signupType: 'admin_only',
       startsAt: new Date().toISOString(),
       gameConfig: {
-        fleetId: process.env.FLEET_ID || 'd6c19ade-cab3-4a4d-9602-42af00ca56e6',
+        fleetId: process.env.FLEET_ID || '1c74c4a2-b3b0-407d-b30a-f0ec6538a397',
         arenas: ['gamma 01', 'beta 01', 'gamma 02', 'beta 02', 'gamma 03', 'beta 03'],
       },
       settings: {
