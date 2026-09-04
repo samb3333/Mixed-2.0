@@ -315,7 +315,7 @@ module.exports = {
 			} else {
 				memberList =
 				tournament.participants.size > 0
-				? [...tournament.participants].map(id => `<@${id}> (${players.get(id)?.username || 'Unknown'})`).join('\n')
+				? [...tournament.participants].map(id => `<@${id}>`).join('\n')
 				: 'No one yet...';
 			}
 			
@@ -380,7 +380,7 @@ module.exports = {
 				try {
 					await member.roles.add(roleId);
 					// Usernames now come from the ODC API by Discord ID, so we no longer store one locally.
-					players.register(i.user.id, '');
+					players.register(i.user.id);
 					return i.reply({
 						content: `Welcome **${username}**! You've been given the **${region}** role.`,
 						ephemeral: true,

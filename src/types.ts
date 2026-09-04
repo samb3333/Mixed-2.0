@@ -33,7 +33,6 @@ export const REGION_ROLES: Record<Region, string> = {
 
 export interface Player {
 	userId: string;
-	username: string;
 	mmr: number;
 }
 

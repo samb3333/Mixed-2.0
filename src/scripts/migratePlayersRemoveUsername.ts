@@ -1,6 +1,5 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { Player } from '../types';
 
 const DB_PATH = path.join(__dirname, '../../data/players.json');
 
@@ -16,7 +15,7 @@ function main(): void {
     return;
   }
 
-  const players: Player[] = JSON.parse(raw);
+  const players: Record<string, unknown>[] = JSON.parse(raw);
   if (!Array.isArray(players)) {
     throw new Error('players.json is not an array, aborting.');
   }
@@ -24,11 +23,11 @@ function main(): void {
   fs.writeFileSync(`${DB_PATH}.bak`, raw);
 
   for (const player of players) {
-    player.username = '';
+    delete player.username;
   }
 
   fs.writeFileSync(DB_PATH, JSON.stringify(players, null, 2));
-  console.log(`Blanked username for ${players.length} player(s) in ${DB_PATH}`);
+  console.log(`Removed the username field from ${players.length} player(s) in ${DB_PATH}`);
   console.log(`Backup of the original file saved to ${DB_PATH}.bak`);
 }
 
