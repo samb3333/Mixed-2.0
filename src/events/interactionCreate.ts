@@ -13,7 +13,9 @@ const teamsManager = TeamsManager.getInstance();
 import { PartyManager } from '../classes/PartyManager';
 const partyManager = PartyManager.getInstance()
 
-const token = process.env.ODC as string;
+import { hasOdcAccount, setTournamentState, getPlacements } from '../classes/OdcApi';
+
+const ODC_SIGNUP_URL = 'https://oriondriftcompetitive.com';
 
 module.exports = {
 	name: Events.InteractionCreate,
@@ -22,6 +24,14 @@ module.exports = {
 			const i = interaction as ButtonInteraction;
 			// handle button interaction here
 			if (i.customId === 'open_registration') {
+				const hasAccount = await hasOdcAccount(i.user.id);
+				if (!hasAccount) {
+					return i.reply({
+						content: `You need an account on our site before you can register. Create one at ${ODC_SIGNUP_URL} and then click **Register** again.`,
+						ephemeral: true,
+					});
+				}
+
 				const modal = new ModalBuilder()
 				.setCustomId('registration_modal')
 				.setTitle('Server Registration');
@@ -107,7 +117,7 @@ module.exports = {
 					return;
 				}
 				//await i.deferReply({ ephemeral: true });
-				const result = manager.join(tournamentName, i.user.id);
+				const result = await manager.join(tournamentName, i.user.id);
 				if (result === 'already_in') {
 				return i.editReply({ content: 'You are already in this tournament!' });
 				}
@@ -115,8 +125,8 @@ module.exports = {
 				return i.editReply({ content: 'Tournament already started.' });
 				}
 				if (result === 'not_registered') {
-				return i.editReply({ 
-					content: 'You have not linked a username, contact a staff member to fix this.'
+				return i.editReply({
+					content: `You need an account on our site before you can join tournaments. Create one at ${ODC_SIGNUP_URL} and then try again.`
 				});
 				}
 				if (result === 'no_party') {
@@ -214,21 +224,10 @@ module.exports = {
 					return i.reply({ content: 'Tournament not found.', ephemeral: true });
 				}
 
-				const response = await fetch(`https://tournament.oriondriftcompetitive.com/api/tournaments/${teams.odcTournamentId}/start`, {
-				method: 'POST',
-				headers: {
-					'Authorization': token,
-					'Content-Type': 'application/json'
-				}
-				});
-
-				const data = await response.json();
-
-				if (!response.ok) {
-					console.error('Failed to start tournament on ODC:', data);
+				const ok = await setTournamentState(teams.odcTournamentId, 'in_progress');
+				if (!ok) {
 					return i.reply({ content: 'Failed to start tournament on ODC.', ephemeral: true });
 				}
-				console.log('Tournament started on ODC:', data);
 				await i.reply({ content: `**${tournamentName} Tournament** has been started on ODC!`, ephemeral: false });
 				return;
 
@@ -238,21 +237,10 @@ module.exports = {
 					return i.reply({ content: 'Tournament not found.', ephemeral: true });
 				}
 
-				const response = await fetch(`https://tournament.oriondriftcompetitive.com/api/tournaments/${teams.odcTournamentId}/end`, {
-				method: 'POST',
-				headers: {
-					'Authorization': token,
-					'Content-Type': 'application/json'
-				}
-				});
-
-				const data = await response.json();
-
-				if (!response.ok) {
-					console.error('Failed to finish tournament on ODC:', data);
-					return i.reply({ content: 'Failed to finish tournament on ODC.', ephemeral: true });
-				}
-				console.log('Tournament finished on ODC:', data);
+				// const ok = await setTournamentState(teams.odcTournamentId, 'completed');
+				// if (!ok) {
+				// 	return i.reply({ content: 'Failed to finish tournament on ODC.', ephemeral: true });
+				// }
 				await i.reply({ content: `**${tournamentName} Tournament** has been finished on ODC!`, ephemeral: false });
 
 				const guild = i.guild;
@@ -260,59 +248,30 @@ module.exports = {
 
 				const channel = guild.channels.cache.get(process.env.standingsChannelID as string);
 
-				await fetch(`https://api.challonge.com/v1/tournaments/${data.data.challongeTournamentId}/finalize.json?api_key=${process.env.CHALLONGE}`, {
-					method: 'POST',
-				});
+				const placements = await getPlacements(teams.odcTournamentId);
 
-				const participantsResult = await fetch(
-					`https://api.challonge.com/v1/tournaments/${data.data.challongeTournamentId}/participants.json?api_key=${process.env.CHALLONGE}`
-				);
-				const participants = await participantsResult.json();
-				console.log('Challonge participants response:', JSON.stringify(participants));
-
-				if (channel && channel.isTextBased() && participants) {
-					const results = participants
-					.map((p: any) => ({
-						name: p.participant.name,
-						rank: p.participant.final_rank,
-					}))
-					.filter((p: any) => p.rank !== null)
-					.sort((a: any, b: any) => a.rank - b.rank);
-
-					console.log(results);
+				if (channel && channel.isTextBased() && placements.length > 0) {
+					const medalByPlace: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
 
 					let messageContent = `### ${tournamentName}`;
-					messageContent += "\n 🥇"
-					if (results[0]) {
-						const team = teamsManager.getTeam(tournamentName, results[0].name);
-						if (team) {
-							for (const user_id of team) {
-								messageContent += `<@${user_id}> `;
-							}
-						}
-					}
-					messageContent += "\n 🥈"
-					if (results[1]) {
-						const team = teamsManager.getTeam(tournamentName, results[1].name);
-						if (team) {
-							for (const user_id of team) {
-								messageContent += `<@${user_id}> `;
-							}
-						}
-					}
-					messageContent += "\n 🥉"
-					if (results[2]) {
-						const team = teamsManager.getTeam(tournamentName, results[2].name);
-						if (team) {
-							for (const user_id of team) {
-								messageContent += `<@${user_id}> `;
+					for (const place of [1, 2, 3]) {
+						const placedTeams = placements.filter(p => p.place === place);
+						if (placedTeams.length === 0) continue;
+
+						messageContent += `\n ${medalByPlace[place]}`;
+						for (const placed of placedTeams) {
+							const roster = teams.teams[placed.participantId];
+							if (roster) {
+								for (const user_id of roster) {
+									messageContent += `<@${user_id}> `;
+								}
 							}
 						}
 					}
 
 					await channel.send(messageContent);
 				} else {
-					console.error('Standings channel not found or is not text-based or participants data is missing.');
+					console.error('Standings channel not found, is not text-based, or no placements were returned.');
 				}
 
 				teamsManager.deleteTournament(tournamentName);
@@ -324,25 +283,14 @@ module.exports = {
 					return i.reply({ content: 'Tournament not found.', ephemeral: true });
 				}
 
-				const response = await fetch(`https://tournament.oriondriftcompetitive.com/api/tournaments/${teams.odcTournamentId}`, {
-				method: 'DELETE',
-				headers: {
-					'Authorization': token,
-					'Content-Type': 'application/json'
-				}
-				});
-
-				const data = await response.json();
-
-				if (!response.ok) {
-					console.error('Failed to delete tournament on ODC:', data);
-					return i.reply({ content: 'Failed to delete tournament on ODC.', ephemeral: true });
+				const ok = await setTournamentState(teams.odcTournamentId, 'cancelled');
+				if (!ok) {
+					return i.reply({ content: 'Failed to cancel tournament on ODC.', ephemeral: true });
 				}
 
 				teamsManager.deleteTournament(tournamentName);
 
-				console.log('Tournament deleted on ODC:', data);
-				await i.reply({ content: `**${tournamentName} Tournament** has been deleted on ODC!`, ephemeral: false });
+				await i.reply({ content: `**${tournamentName} Tournament** has been cancelled on ODC!`, ephemeral: false });
 				return;
 
 			} else {
@@ -367,7 +315,7 @@ module.exports = {
 			} else {
 				memberList =
 				tournament.participants.size > 0
-				? [...tournament.participants].map(id => `<@${id}> (${players.get(id)?.username || 'Unknown'})`).join('\n')
+				? [...tournament.participants].map(id => `<@${id}>`).join('\n')
 				: 'No one yet...';
 			}
 			
@@ -431,7 +379,8 @@ module.exports = {
 
 				try {
 					await member.roles.add(roleId);
-					players.register(i.user.id, username);
+					// Usernames now come from the ODC API by Discord ID, so we no longer store one locally.
+					players.register(i.user.id);
 					return i.reply({
 						content: `Welcome **${username}**! You've been given the **${region}** role.`,
 						ephemeral: true,

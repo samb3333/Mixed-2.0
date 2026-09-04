@@ -6,12 +6,14 @@ export interface Tournament {
   name: string;
   participants: Set<string>;
   partyOnly: boolean;
+  region: Region;
 }
 
 export interface TournamentJSON {
   name: string;
   participants: string[];
   partyOnly: boolean;
+  region: Region;
 }
 
 export interface ActivityCheck {
@@ -31,14 +33,14 @@ export const REGION_ROLES: Record<Region, string> = {
 
 export interface Player {
 	userId: string;
-	username: string;
 	mmr: number;
 }
 
 export interface TournamentTeams {
   tournamentName: string;
-  odcTournamentId?: string;
-  teams: Record<string, string[]>; // { 'Team 1': ['id1', 'id2', ...] }
+  odcTournamentId: string;
+  teams: Record<string, string[]>; // odcParticipantId -> discord user ids
+  teamNames: Record<string, string>; // odcParticipantId -> display name
 }
 
 export interface MatchRecord {

@@ -4,6 +4,7 @@ import { MatchRecord, TournamentTeams } from '../types';
 import { ChannelType, TextChannel, ThreadAutoArchiveDuration, ThreadChannel } from 'discord.js';
 import { client } from '..';
 import { PlayerManager } from './PlayerManager';
+import { getTournamentMatches, updateMatch, OdcMatch, OdcGame } from './OdcApi';
 
 const DB_PATH = path.join(__dirname, '../../data/teams.json');
 
@@ -37,7 +38,8 @@ export class TeamsManager {
         return;
       }
       for (const t of parsed) {
-        this.data.set(t.tournamentName, t);
+        // Tournaments created before the ODC API migration won't have teamNames on disk.
+        this.data.set(t.tournamentName, { ...t, teamNames: t.teamNames ?? {} });
       }
       console.log(`Loaded ${this.data.size} odc tournaments(s) from disk`);
     } catch (err) {
@@ -115,27 +117,18 @@ export class TeamsManager {
 
   private async checkGames(tournament: TournamentTeams): Promise<void> {
     try {
-      const res = await fetch(
-        `https://tournament.oriondriftcompetitive.com/api/tournaments/${tournament.odcTournamentId}`
-      );
+      const matches = await getTournamentMatches(tournament.odcTournamentId);
 
-      const matches = await res.json();
-      if (!matches.data || !Array.isArray(matches.data.matches)) {
-        console.error(`Invalid ODC data for ${tournament.tournamentName}`);
-        return;
-      }
-      for (const match of matches.data.matches) {
+      for (const match of matches) {
         try {
-          const record = this.postedMatches.get(match);
+          const record = this.postedMatches.get(match._id);
+          const team1Name = tournament.teamNames[match.team1Id] ?? 'Team 1';
+          const team2Name = tournament.teamNames[match.team2Id] ?? 'Team 2';
+
           if (!record) {
-            const res = await fetch(
-              `https://tournament.oriondriftcompetitive.com/api/matches/${match}`
-            );
-            const currentMatch = await res.json();
-            if (!currentMatch.data) continue;
-            if (currentMatch.data.status === 'scheduled') {
-              console.log(`${currentMatch.data.home.name} vs ${currentMatch.data.away.name}`);
-              console.log(`${currentMatch.data.stationName} ${currentMatch.data.arena} ${tournament.odcTournamentId}`);
+            if (match.state === 'waiting') {
+              console.log(`${team1Name} vs ${team2Name}`);
+              console.log(`${match.stationName} ${match.arena} ${tournament.odcTournamentId}`);
 
               const channel = await this.fetchChannel(process.env.MatchesChannelID as string) as TextChannel | null;
               if (!channel || !channel.isTextBased()) {
@@ -144,52 +137,54 @@ export class TeamsManager {
               }
 
               const thread = await channel.threads.create({
-                name: `Round: ${currentMatch.data.round} - ${currentMatch.data.home.name} vs ${currentMatch.data.away.name}`,
+                name: `Round: ${match.round} - ${team1Name} vs ${team2Name}`,
                 type: ChannelType.PrivateThread,
                 invitable: false,
                 autoArchiveDuration: ThreadAutoArchiveDuration.OneHour,
               });
 
-              await thread.send(`Round: ${currentMatch.data.round} - ${currentMatch.data.home.name} vs ${currentMatch.data.away.name}`)
+              await thread.send(`Round: ${match.round} - ${team1Name} vs ${team2Name}`);
 
-              let message = `## Station: ${currentMatch.data.stationName}\n ### Arena: ${currentMatch.data.arena}\n ### Best of ${currentMatch.data.bestOf}\n`
+              let message = `## Station: ${match.stationName ?? 'TBD'}\n ### Arena: ${match.arena ?? 'TBD'}\n ### Best of ${match.bestOf ?? '?'}\n`;
 
-              message += "\n"
-              message += "\n"
-              for (const user_id of this.getTeam(tournament.tournamentName, currentMatch.data.home.name) || []) {
-                message += `<@${user_id}> `;
+              message += "\n";
+              message += "\n";
+              for (const userId of tournament.teams[match.team1Id] ?? []) {
+                message += `<@${userId}> `;
               }
 
               message += "vs ";
 
-              for (const user_id of this.getTeam(tournament.tournamentName, currentMatch.data.away.name) || []) {
-                message += `<@${user_id}> `
+              for (const userId of tournament.teams[match.team2Id] ?? []) {
+                message += `<@${userId}> `;
               }
 
               await thread.send(message);
 
-              this.postedMatches.set(match, {
-                matchId: match,
+              await updateMatch(tournament.odcTournamentId, match._id, { discordThreadId: thread.id });
+
+              this.postedMatches.set(match._id, {
+                matchId: match._id,
                 threadId: thread.id,
                 completed: false,
               });
               this.savePostedMatches();
             }
           }
-          else if (record && !record.completed) {
-            const res = await fetch(
-              `https://tournament.oriondriftcompetitive.com/api/matches/${match}`
-            );
-            const currentMatch = await res.json();
-            if (!currentMatch.data) continue;
-
-            if (currentMatch.data.status === 'completed') {
+          else if (!record.completed) {
+            if (match.state === 'completed') {
               const thread = await this.fetchChannel(record.threadId) as ThreadChannel | null;
 
-              let message = `### ${currentMatch.data.home.name} ${currentMatch.data.home.score} - ${currentMatch.data.away.score} ${currentMatch.data.away.name}`;
-              currentMatch.data.matchScores.forEach((score: any, index: number) => {
-                const round = index + 1;
-                message += `\nRound ${round}: ${score.home} - ${score.away}`;
+              let team1Wins = 0;
+              let team2Wins = 0;
+              for (const game of match.games) {
+                if (game.team1Score > game.team2Score) team1Wins++;
+                else if (game.team2Score > game.team1Score) team2Wins++;
+              }
+
+              let message = `### ${team1Name} ${team1Wins} - ${team2Wins} ${team2Name}`;
+              match.games.forEach((game, index) => {
+                message += `\nRound ${index + 1}: ${game.team1Score} - ${game.team2Score}`;
               });
 
               if (thread && thread.isTextBased()) {
@@ -197,21 +192,22 @@ export class TeamsManager {
               } else {
                 // Thread was deleted or is no longer reachable. Score the match anyway so
                 // the record settles instead of being retried on every poll.
-                console.error(`Thread ${record.threadId} not found for completed match ${match}, scoring without it`);
+                console.error(`Thread ${record.threadId} not found for completed match ${match._id}, scoring without it`);
               }
 
-              console.log(`${currentMatch.data.home.name} ${currentMatch.data.home.score} - ${currentMatch.data.away.score} ${currentMatch.data.away.name}`);
+              console.log(`${team1Name} ${team1Wins} - ${team2Wins} ${team2Name}`);
               record.completed = true;
 
-              let winners = null;
-              let losers = null;
+              const winnerParticipantId = match.winner;
+              const loserParticipantId = winnerParticipantId === match.team1Id ? match.team2Id : match.team1Id;
 
-              if (currentMatch.data.home.score > currentMatch.data.away.score) {
-                winners = this.getTeam(tournament.tournamentName, currentMatch.data.home.name) || [];
-                losers = this.getTeam(tournament.tournamentName, currentMatch.data.away.name) || [];
-              } else {
-                winners = this.getTeam(tournament.tournamentName, currentMatch.data.away.name) || [];
-                losers = this.getTeam(tournament.tournamentName, currentMatch.data.home.name) || [];
+              const winners = (winnerParticipantId && tournament.teams[winnerParticipantId]) || [];
+              const losers = tournament.teams[loserParticipantId] ?? [];
+
+              if (!winnerParticipantId || winners.length === 0) {
+                console.error(`Could not resolve winner roster for match ${match._id}, skipping MMR update`);
+                this.savePostedMatches();
+                continue;
               }
 
               const winnerAvg = winners.reduce((sum, userId) => {
@@ -219,15 +215,14 @@ export class TeamsManager {
                 return sum + (player ? player.mmr : 1000);
               }, 0) / winners.length;
 
-              const loserAvg = losers.reduce((sum, userId) => {
-                const player = PlayerManager.getInstance().get(userId);
-                return sum + (player ? player.mmr : 1000);
-              }, 0) / losers.length;
+              const loserAvg = losers.length > 0
+                ? losers.reduce((sum, userId) => {
+                    const player = PlayerManager.getInstance().get(userId);
+                    return sum + (player ? player.mmr : 1000);
+                  }, 0) / losers.length
+                : 1000;
 
-              let multiplier = 4 * currentMatch.data.bestOf + 12
-              if (currentMatch.data.round < 0) {
-                multiplier = multiplier * 0.75
-              }
+              const multiplier = 4 * (match.bestOf ?? 3) + 12;
 
               for (const userId of winners) {
                 const player = PlayerManager.getInstance().get(userId);
@@ -249,7 +244,7 @@ export class TeamsManager {
             }
           }
         } catch (err) {
-          console.error(`Failed to process match ${match} for ${tournament.tournamentName}:`, err);
+          console.error(`Failed to process match ${match._id} for ${tournament.tournamentName}:`, err);
         }
       }
     } catch (err) {
@@ -257,8 +252,8 @@ export class TeamsManager {
     }
   }
 
-  createTournament(tournamentName: string, teams: Record<string, string[]>, odcTournamentId?: string): TournamentTeams {
-    const entry: TournamentTeams = { tournamentName, odcTournamentId, teams };
+  createTournament(tournamentName: string, teams: Record<string, string[]>, teamNames: Record<string, string>, odcTournamentId: string): TournamentTeams {
+    const entry: TournamentTeams = { tournamentName, odcTournamentId, teams, teamNames };
     this.data.set(tournamentName, entry);
     this.save();
     return entry;
@@ -275,8 +270,9 @@ export class TeamsManager {
   getByPlayer(userId: string): { tournament: string; teamName: string; members: string[] }[] {
     const results = [];
     for (const tournament of this.data.values()) {
-      for (const [teamName, members] of Object.entries(tournament.teams)) {
+      for (const [participantId, members] of Object.entries(tournament.teams)) {
         if (members.includes(userId)) {
+          const teamName = tournament.teamNames[participantId] ?? participantId;
           results.push({ tournament: tournament.tournamentName, teamName, members });
         }
       }
@@ -288,40 +284,5 @@ export class TeamsManager {
     const deleted = this.data.delete(tournamentName);
     if (deleted) this.save();
     return deleted;
-  }
-
-  async updateServers(tournamentName: string, serverID: string): Promise<boolean> {
-    const tournament = this.getTournament(tournamentName)
-    if (!tournament || !tournament.odcTournamentId) return false;
-
-    const res = await fetch(
-        `https://tournament.oriondriftcompetitive.com/api/tournaments/${tournament.odcTournamentId}`
-      );
-
-    const tournamentData = await res.json()
-    if (!tournamentData) return false;
-
-    if (!tournamentData.data.stationIDs) return false;
-
-    let IDs: string[] = tournamentData.data.stationIDs
-    IDs.push(serverID)
-
-    let payload = {
-            "stationIDs": IDs
-        }
-
-    const token = process.env.ODC as string;
-    const response = await fetch(`https://tournament.oriondriftcompetitive.com/api/tournaments/${tournament.odcTournamentId}`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': token,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
-
-    const result = await response.json()
-
-    return true;
   }
 }

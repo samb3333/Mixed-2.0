@@ -8,6 +8,7 @@ import {
   ChannelType,
 } from 'discord.js';
 import { TournamentManager } from '../../classes/TournamentManager';
+import { Region } from '../../types';
 
 const manager = TournamentManager.getInstance();
 
@@ -21,6 +22,14 @@ module.exports = {
     .addBooleanOption(option =>
       option.setName('party_only').setDescription('Party only tournament').setRequired(true)
     )
+    .addStringOption(option =>
+      option.setName('region').setDescription('The tournament region').setRequired(true)
+        .addChoices(
+          { name: 'EU', value: 'EU' },
+          { name: 'NA', value: 'NA' },
+          { name: 'OCE', value: 'OCE' },
+        )
+    )
     .setDefaultMemberPermissions(0),
 
   async execute(interaction: ChatInputCommandInteraction) {
@@ -28,8 +37,9 @@ module.exports = {
 
     const name = interaction.options.getString('name', true);
     const partyOnly = interaction.options.getBoolean('party_only', true);
+    const region = interaction.options.getString('region', true) as Region;
 
-    const result = manager.create(name, partyOnly);
+    const result = manager.create(name, partyOnly, region);
 
     if (result === 'already_exists') {
         await interaction.deleteReply();
@@ -42,7 +52,7 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setTitle(`${name} Tournament (0)`)
       .setColor(0x5865f2)
-      .setDescription('No one yet...');
+      .setDescription(`Region: **${region}**\nNo one yet...`);
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()

@@ -53,18 +53,10 @@ export class PlayerManager {
 
   // --- Methods ---
 
-  register(userId: string, username: string): Player | 'already_registered' {
+  register(userId: string): Player | 'already_registered' {
     if (this.players.has(userId)) return 'already_registered';
-    const player: Player = { userId, username, mmr: 1000 };
+    const player: Player = { userId, mmr: 1000 };
     this.players.set(userId, player);
-    this.save();
-    return player;
-  }
-
-  editUsername(userId: string, newUsername: string): Player | 'not_found' {
-    const player = this.players.get(userId);
-    if (!player) return 'not_found';
-    player.username = newUsername;
     this.save();
     return player;
   }

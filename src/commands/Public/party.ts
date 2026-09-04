@@ -44,7 +44,7 @@ module.exports = {
                 case 'create':
                     const r = manager.create(interaction.user.id)
                     if (r === 'already_in') return await interaction.editReply('You are already in a party, use /leave')
-                    if (r === 'not_registered') return await interaction.editReply('You need to register, use /link')
+                    if (r === 'not_registered') return await interaction.editReply('You need to register first, use the registration panel')
                     await interaction.editReply('Party created successfully!');
                     break;
 
@@ -79,7 +79,7 @@ module.exports = {
 
                     const hasLinked = PlayerManager.getInstance().isRegistered(player.id)
 
-                    if (!hasLinked) return await interaction.editReply('You need to register, use /link')
+                    if (!hasLinked) return await interaction.editReply('That player needs to register first, use the registration panel')
 
                     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
                         new ButtonBuilder()
