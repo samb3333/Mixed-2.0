@@ -237,10 +237,10 @@ module.exports = {
 					return i.reply({ content: 'Tournament not found.', ephemeral: true });
 				}
 
-				const ok = await setTournamentState(teams.odcTournamentId, 'completed');
-				if (!ok) {
-					return i.reply({ content: 'Failed to finish tournament on ODC.', ephemeral: true });
-				}
+				// const ok = await setTournamentState(teams.odcTournamentId, 'completed');
+				// if (!ok) {
+				// 	return i.reply({ content: 'Failed to finish tournament on ODC.', ephemeral: true });
+				// }
 				await i.reply({ content: `**${tournamentName} Tournament** has been finished on ODC!`, ephemeral: false });
 
 				const guild = i.guild;

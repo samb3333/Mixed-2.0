@@ -126,7 +126,7 @@ export class TeamsManager {
           const team2Name = tournament.teamNames[match.team2Id] ?? 'Team 2';
 
           if (!record) {
-            if (match.state === 'scheduled') {
+            if (match.state === 'waiting') {
               console.log(`${team1Name} vs ${team2Name}`);
               console.log(`${match.stationName} ${match.arena} ${tournament.odcTournamentId}`);
 

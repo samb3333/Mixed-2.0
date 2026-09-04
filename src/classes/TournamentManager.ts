@@ -469,6 +469,7 @@ export class TournamentManager {
           losersFinal: 5,
         },
         maxTeams: Math.max(teams.length, 2),
+        bracketReset: false,
       },
     });
 
@@ -476,6 +477,8 @@ export class TournamentManager {
       await channel.send('⚠️ Failed to create the tournament on ODC.');
       return false;
     }
+
+    await channel.send(`Bracket: https://oriondriftcompetitive.com/tournaments/${tournament._id}`);
 
     // make odc one-off teams, keyed by the participant ID ODC hands back
     const teamsData: Record<string, string[]> = {};
