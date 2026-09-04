@@ -235,6 +235,10 @@ export class TournamentManager {
     return this.tournaments.get(name);
   }
 
+  getAll(): Tournament[] {
+    return [...this.tournaments.values()];
+  }
+
   getActivityChecks(tournamentName: string): ActivityCheck | undefined {
     return this.activityChecks.get(tournamentName);
   }
