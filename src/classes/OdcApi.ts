@@ -202,3 +202,13 @@ export async function getPlacements(tournamentId: string): Promise<OdcPlacement[
   const { ok, data } = await odcRequest<OdcPlacement[]>(`/tournaments/${tournamentId}/placements`);
   return ok && data ? data : [];
 }
+
+export async function addOrganisers(tournamentId: string, userIds: string[]): Promise<boolean> {
+  for (const userId of userIds) {
+    const { ok } = await odcRequest(`/tournaments/${tournamentId}/organisers/${userId}`, {
+      method: 'POST',
+    });
+    if (!ok) return false;
+  }
+  return true;
+}

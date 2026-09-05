@@ -4,7 +4,7 @@ import * as path from 'path';
 import { PlayerManager } from './PlayerManager';
 import { TeamsManager } from './TeamsManager';
 import { PartyManager } from './PartyManager';
-import { hasOdcAccount, getOdcUsersByDiscordIds, createTournament, createOneOffTeam, generateBracket } from './OdcApi';
+import { hasOdcAccount, getOdcUsersByDiscordIds, createTournament, createOneOffTeam, generateBracket, addOrganisers } from './OdcApi';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, ChatInputCommandInteraction, Client, EmbedBuilder, TextChannel } from 'discord.js';
 import { client } from '..';
 
@@ -479,6 +479,14 @@ export class TournamentManager {
     }
 
     await channel.send(`Bracket: https://oriondriftcompetitive.com/tournaments/${tournament._id}`);
+
+    const organisers: string[] = ["6a01b7c35507b2ce693713af", "69efa445bae11ca1b9622f15", "69efa8d5bae11ca1b9622fe3", "69efa473bae11ca1b9622f2a"];
+
+    const organisersAdded = await addOrganisers(tournament._id, organisers);
+    if (!organisersAdded) {
+      await channel.send('⚠️ Failed to add organisers to the tournament on ODC.');
+      return false;
+    }
 
     // make odc one-off teams, keyed by the participant ID ODC hands back
     const teamsData: Record<string, string[]> = {};
