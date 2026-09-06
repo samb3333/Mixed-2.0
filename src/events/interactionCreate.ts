@@ -36,14 +36,6 @@ module.exports = {
 				.setCustomId('registration_modal')
 				.setTitle('Server Registration');
 
-				const usernameInput = new TextInputBuilder()
-				.setCustomId('username')
-				.setLabel('Your in-game username')
-				.setPlaceholder('Samzy01')
-				.setStyle(TextInputStyle.Short)
-				.setRequired(true)
-				.setMaxLength(32);
-
 				const regionInput = new LabelBuilder()
 				.setLabel('Your region (EU / NA / OCE)')
 				.setStringSelectMenuComponent(
@@ -66,7 +58,6 @@ module.exports = {
 					)
 				);
 
-				modal.addComponents(usernameInput);
 				modal.addComponents(regionInput);
 
 				return i.showModal(modal);
@@ -347,7 +338,6 @@ module.exports = {
 			const i = interaction as ModalSubmitInteraction;
 
 			if (i.customId === 'registration_modal') {
-				const username = i.fields.getTextInputValue('username');
 				const region = i.fields.getStringSelectValues('region')[0] as Region;
 
 				// if (players.isRegistered(i.user.id)) {
@@ -366,23 +356,13 @@ module.exports = {
 				// Assign role
 				const member = await i.guild?.members.fetch(i.user.id);
 				if (!member) return;
-				
-				try {
-					await member.setNickname(username);
-				} catch (err) {
-					console.error(err);
-					return i.reply({
-						content: '⚠️ Failed to assign role. Please contact a staff member.',
-						ephemeral: true,
-					});
-				}
 
 				try {
 					await member.roles.add(roleId);
 					// Usernames now come from the ODC API by Discord ID, so we no longer store one locally.
 					players.register(i.user.id);
 					return i.reply({
-						content: `Welcome **${username}**! You've been given the **${region}** role.`,
+						content: `Welcome **${i.user.displayName}**! You've been given the **${region}** role.`,
 						ephemeral: true,
 					});
 				} catch (err) {
