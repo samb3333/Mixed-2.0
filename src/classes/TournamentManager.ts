@@ -263,8 +263,9 @@ export class TournamentManager {
     const teams: string[][] = Array.from({ length: teamCount }, () => []);
 
     for (const id of sorted) {
-      // Find the team with the lowest total MMR
-      const lowestTeam = teams.reduce((lowest, team) => {
+      // Find the team with the lowest total MMR among teams that still have room
+      const openTeams = teams.filter(team => team.length < teamSize);
+      const lowestTeam = openTeams.reduce((lowest, team) => {
         const teamMMR = (t: string[]) => t.reduce((sum, id) => sum + (playerManager.get(id)?.mmr ?? 1000), 0);
         return teamMMR(team) < teamMMR(lowest) ? team : lowest;
       });
