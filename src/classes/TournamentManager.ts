@@ -455,7 +455,7 @@ export class TournamentManager {
       name,
       region: t.region,
       type: 'community',
-      format: 'double',
+      format: 'single',
       signupType: 'admin_only',
       startsAt: new Date().toISOString(),
       gameConfig: {
