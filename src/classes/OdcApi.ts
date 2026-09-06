@@ -183,7 +183,7 @@ export async function setTournamentState(tournamentId: string, state: Tournament
 }
 
 export async function getTournamentMatches(tournamentId: string, params: Record<string, string> = {}): Promise<OdcMatch[]> {
-  const query = new URLSearchParams(params).toString();
+  const query = new URLSearchParams({ limit: '1000', ...params }).toString();
   const { ok, data } = await odcRequest<{ data: OdcMatch[] }>(
     `/tournaments/${tournamentId}/matches${query ? `?${query}` : ''}`
   );
