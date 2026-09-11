@@ -285,4 +285,27 @@ export class TeamsManager {
     if (deleted) this.save();
     return deleted;
   }
+
+  /** Finds the participant (team) ID a player belongs to within a tournament, if any. */
+  findParticipantByPlayer(tournamentName: string, userId: string): string | undefined {
+    const t = this.data.get(tournamentName);
+    if (!t) return undefined;
+    for (const [participantId, members] of Object.entries(t.teams)) {
+      if (members.includes(userId)) return participantId;
+    }
+    return undefined;
+  }
+
+  /** Replaces `oldUserId` with `newUserId` on a team's roster in teams.json. */
+  swapPlayer(tournamentName: string, participantId: string, oldUserId: string, newUserId: string): boolean {
+    const t = this.data.get(tournamentName);
+    if (!t) return false;
+    const members = t.teams[participantId];
+    if (!members) return false;
+    const index = members.indexOf(oldUserId);
+    if (index === -1) return false;
+    members[index] = newUserId;
+    this.save();
+    return true;
+  }
 }

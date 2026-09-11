@@ -212,3 +212,28 @@ export async function addOrganisers(tournamentId: string, userIds: string[]): Pr
   }
   return true;
 }
+
+export type RosterOpResult = 'ok' | 'not_frozen' | 'not_found' | 'already_on_roster' | 'error';
+
+/** Adds an ODC user to a participant's frozen roster. `userId` is the ODC user ID. */
+export async function addPlayerToRoster(tournamentId: string, participantId: string, userId: string): Promise<RosterOpResult> {
+  const { ok, status } = await odcRequest(`/tournaments/${tournamentId}/participants/${participantId}/roster/${userId}`, {
+    method: 'POST',
+  });
+  if (ok) return 'ok';
+  if (status === 400) return 'not_frozen';
+  if (status === 404) return 'not_found';
+  if (status === 409) return 'already_on_roster';
+  return 'error';
+}
+
+/** Removes an ODC user from a participant's frozen roster. `userId` is the ODC user ID. */
+export async function removePlayerFromRoster(tournamentId: string, participantId: string, userId: string): Promise<RosterOpResult> {
+  const { ok, status } = await odcRequest(`/tournaments/${tournamentId}/participants/${participantId}/roster/${userId}`, {
+    method: 'DELETE',
+  });
+  if (ok) return 'ok';
+  if (status === 400) return 'not_frozen';
+  if (status === 404) return 'not_found';
+  return 'error';
+}
