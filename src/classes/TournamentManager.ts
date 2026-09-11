@@ -177,13 +177,10 @@ export class TournamentManager {
     return tournament;
   }
 
-  async join(name: string, userId: string): Promise<'joined' | 'already_in' | 'not_found' | 'not_registered' | 'no_party'> {
+  async join(name: string, userId: string): Promise<'joined' | 'already_in' | 'not_found' | 'not_registered' | 'partner_not_registered' | 'no_party'> {
     const t = this.tournaments.get(name);
     if (!t) return 'not_found';
     if (t.participants.has(userId)) return 'already_in';
-
-    const hasAccount = await hasOdcAccount(userId);
-    if (!hasAccount) return 'not_registered';
 
     if (t.partyOnly) {
       const party = PartyManager.getInstance().getParty(userId);
@@ -191,10 +188,20 @@ export class TournamentManager {
 
       if (t.participants.has(party.leader)) return 'already_in';
 
+      const hasAccount = await hasOdcAccount(userId);
+      if (!hasAccount) return 'not_registered';
+
+      const partnerId = userId === party.leader ? party.member : party.leader;
+      const partnerHasAccount = await hasOdcAccount(partnerId);
+      if (!partnerHasAccount) return 'partner_not_registered';
+
       t.participants.add(party.leader)
       this.save()
       return 'joined'
     }
+
+    const hasAccount = await hasOdcAccount(userId);
+    if (!hasAccount) return 'not_registered';
 
     t.participants.add(userId);
     this.save();

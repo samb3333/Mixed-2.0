@@ -120,6 +120,11 @@ module.exports = {
 					content: `You need an account on our site before you can join tournaments. Create one at ${ODC_SIGNUP_URL} and then try again.`
 				});
 				}
+				if (result === 'partner_not_registered') {
+				return i.editReply({
+					content: `Your party partner needs an account on our site before you can join tournaments. Have them create one at ${ODC_SIGNUP_URL} and then try again.`
+				});
+				}
 				if (result === 'no_party') {
 				return i.editReply({ content: 'You are not in a full party!' });
 				}

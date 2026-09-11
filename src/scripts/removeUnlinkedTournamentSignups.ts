@@ -28,10 +28,27 @@ function loadJsonArray<T>(filePath: string): T[] {
   return Array.isArray(parsed) ? parsed : [];
 }
 
-function dmMessage(tournamentNames: string[]): string {
-  const list = tournamentNames.map(n => `**${n}**`).join(', ');
-  const noun = tournamentNames.length > 1 ? 'tournament signups' : 'a tournament signup';
-  return `You've been removed from ${noun} (${list}) because your Discord account isn't linked to an account on ${ODC_SIGNUP_URL} yet. Create one there, then rejoin.`;
+interface DmInfo {
+  own: string[]; // tournaments removed because the recipient has no ODC account
+  partner: string[]; // tournaments removed because the recipient's party partner has no ODC account
+}
+
+function dmMessage(info: DmInfo): string {
+  const messages: string[] = [];
+
+  if (info.own.length > 0) {
+    const list = info.own.map(n => `**${n}**`).join(', ');
+    const noun = info.own.length > 1 ? 'tournament signups' : 'a tournament signup';
+    messages.push(`You've been removed from ${noun} (${list}) because your Discord account isn't linked to an account on ${ODC_SIGNUP_URL} yet. Create one there, then rejoin.`);
+  }
+
+  if (info.partner.length > 0) {
+    const list = info.partner.map(n => `**${n}**`).join(', ');
+    const noun = info.partner.length > 1 ? 'tournament signups' : 'a tournament signup';
+    messages.push(`You've been removed from ${noun} (${list}) because your party partner's Discord account isn't linked to an account on ${ODC_SIGNUP_URL} yet. Have them create one, then rejoin.`);
+  }
+
+  return messages.join('\n\n');
 }
 
 async function main(): Promise<void> {
@@ -67,13 +84,13 @@ async function main(): Promise<void> {
   const odcUsers = await getOdcUsersByDiscordIds([...idsToCheck]);
   const hasAccount = new Set(odcUsers.map(u => u.discordId));
 
-  const toDm = new Map<string, string[]>();
+  const toDm = new Map<string, DmInfo>();
   let removedCount = 0;
 
-  const markForDm = (userId: string, tournamentName: string) => {
-    const list = toDm.get(userId) ?? [];
-    list.push(tournamentName);
-    toDm.set(userId, list);
+  const markForDm = (userId: string, tournamentName: string, reason: 'own' | 'partner') => {
+    const info = toDm.get(userId) ?? { own: [], partner: [] };
+    info[reason].push(tournamentName);
+    toDm.set(userId, info);
   };
 
   for (const tournament of tournaments) {
@@ -92,8 +109,8 @@ async function main(): Promise<void> {
 
         removedCount++;
         console.log(`Removing party (leader ${participantId}${member ? `, member ${member}` : ''}) from "${tournament.name}"`);
-        if (leaderMissing) markForDm(participantId, tournament.name);
-        if (memberMissing && member) markForDm(member, tournament.name);
+        markForDm(participantId, tournament.name, leaderMissing ? 'own' : 'partner');
+        if (member) markForDm(member, tournament.name, memberMissing ? 'own' : 'partner');
       } else {
         if (hasAccount.has(participantId)) {
           kept.push(participantId);
@@ -102,7 +119,7 @@ async function main(): Promise<void> {
 
         removedCount++;
         console.log(`Removing ${participantId} from "${tournament.name}"`);
-        markForDm(participantId, tournament.name);
+        markForDm(participantId, tournament.name, 'own');
       }
     }
 
@@ -124,10 +141,10 @@ async function main(): Promise<void> {
   const client = new Client({ intents: [GatewayIntentBits.Guilds] });
   await client.login(process.env.TOKEN);
 
-  for (const [userId, tournamentNames] of toDm) {
+  for (const [userId, info] of toDm) {
     try {
       const user = await client.users.fetch(userId);
-      await user.send(dmMessage(tournamentNames));
+      await user.send(dmMessage(info));
       console.log(`DMed ${userId}`);
     } catch (err) {
       console.error(`Failed to DM ${userId}:`, err);
