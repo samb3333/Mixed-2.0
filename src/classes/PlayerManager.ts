@@ -53,9 +53,9 @@ export class PlayerManager {
 
   // --- Methods ---
 
-  register(userId: string): Player | 'already_registered' {
+  register(userId: string, username: string): Player | 'already_registered' {
     if (this.players.has(userId)) return 'already_registered';
-    const player: Player = { userId, mmr: 1000 };
+    const player: Player = { userId, mmr: 1000, username };
     this.players.set(userId, player);
     this.save();
     return player;
@@ -63,6 +63,14 @@ export class PlayerManager {
 
   get(userId: string): Player | undefined {
     return this.players.get(userId);
+  }
+
+  setUsername(userId: string, username: string): Player | 'not_found' {
+    const player = this.players.get(userId);
+    if (!player) return 'not_found';
+    player.username = username;
+    this.save();
+    return player;
   }
 
   updateMMR(userId: string, delta: number): Player | 'not_found' {

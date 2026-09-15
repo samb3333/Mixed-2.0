@@ -13,9 +13,7 @@ const teamsManager = TeamsManager.getInstance();
 import { PartyManager } from '../classes/PartyManager';
 const partyManager = PartyManager.getInstance()
 
-import { hasOdcAccount, setTournamentState, getPlacements } from '../classes/OdcApi';
-
-const ODC_SIGNUP_URL = 'https://oriondriftcompetitive.com';
+import { setTournamentState, getPlacements } from '../classes/OdcApi';
 
 module.exports = {
 	name: Events.InteractionCreate,
@@ -24,17 +22,19 @@ module.exports = {
 			const i = interaction as ButtonInteraction;
 			// handle button interaction here
 			if (i.customId === 'open_registration') {
-				const hasAccount = await hasOdcAccount(i.user.id);
-				if (!hasAccount) {
-					return i.reply({
-						content: `You need an account on our site before you can register. Create one at ${ODC_SIGNUP_URL} and then click **Register** again.`,
-						ephemeral: true,
-					});
-				}
-
 				const modal = new ModalBuilder()
 				.setCustomId('registration_modal')
 				.setTitle('Server Registration');
+
+				const nameInput = new LabelBuilder()
+				.setLabel('Your in-game name')
+				.setTextInputComponent(
+					new TextInputBuilder()
+					.setCustomId('username')
+					.setStyle(TextInputStyle.Short)
+					.setMaxLength(64)
+					.setRequired(true)
+				);
 
 				const regionInput = new LabelBuilder()
 				.setLabel('Your region (EU / NA / OCE)')
@@ -58,7 +58,7 @@ module.exports = {
 					)
 				);
 
-				modal.addComponents(regionInput);
+				modal.addComponents(nameInput, regionInput);
 
 				return i.showModal(modal);
 			}
@@ -117,12 +117,12 @@ module.exports = {
 				}
 				if (result === 'not_registered') {
 				return i.editReply({
-					content: `You need an account on our site before you can join tournaments. Create one at ${ODC_SIGNUP_URL} and then try again.`
+					content: 'You need to register first! Use the registration button to get set up, then try again.'
 				});
 				}
 				if (result === 'partner_not_registered') {
 				return i.editReply({
-					content: `Your party partner needs an account on our site before you can join tournaments. Have them create one at ${ODC_SIGNUP_URL} and then try again.`
+					content: 'Your party partner needs to register first! Have them use the registration button, then try again.'
 				});
 				}
 				if (result === 'no_party') {
@@ -215,16 +215,18 @@ module.exports = {
 				}
 				return i.editReply({ content: `**${tournamentName} Tournament** has been started!` });
 			} else if (action === 'tournament_start') {
+				await i.deferReply({ ephemeral: false });
+
 				const teams = teamsManager.getTournament(tournamentName);
 				if (!teams) {
-					return i.reply({ content: 'Tournament not found.', ephemeral: true });
+					return i.editReply({ content: 'Tournament not found.' });
 				}
 
 				const ok = await setTournamentState(teams.odcTournamentId, 'in_progress');
 				if (!ok) {
-					return i.reply({ content: 'Failed to start tournament on ODC.', ephemeral: true });
+					return i.editReply({ content: 'Failed to start tournament on ODC.' });
 				}
-				await i.reply({ content: `**${tournamentName} Tournament** has been started on ODC!`, ephemeral: false });
+				await i.editReply({ content: `**${tournamentName} Tournament** has been started on ODC!` });
 				return;
 
 			} else if (action === 'tournament_finish') {
@@ -274,19 +276,21 @@ module.exports = {
 				return;
 
 			} else if (action === 'tournament_delete') {
+				await i.deferReply({ ephemeral: false });
+
 				const teams = teamsManager.getTournament(tournamentName);
 				if (!teams) {
-					return i.reply({ content: 'Tournament not found.', ephemeral: true });
+					return i.editReply({ content: 'Tournament not found.' });
 				}
 
 				const ok = await setTournamentState(teams.odcTournamentId, 'cancelled');
 				if (!ok) {
-					return i.reply({ content: 'Failed to cancel tournament on ODC.', ephemeral: true });
+					return i.editReply({ content: 'Failed to cancel tournament on ODC.' });
 				}
 
 				teamsManager.deleteTournament(tournamentName);
 
-				await i.reply({ content: `**${tournamentName} Tournament** has been cancelled on ODC!`, ephemeral: false });
+				await i.editReply({ content: `**${tournamentName} Tournament** has been cancelled on ODC!` });
 				return;
 
 			} else {
@@ -344,10 +348,11 @@ module.exports = {
 
 			if (i.customId === 'registration_modal') {
 				const region = i.fields.getStringSelectValues('region')[0] as Region;
+				const username = i.fields.getTextInputValue('username').trim();
 
-				// if (players.isRegistered(i.user.id)) {
-				// 	return i.reply({ content: '⚠️ You are already registered!', ephemeral: true });
-				// }
+				if (!username) {
+					return i.reply({ content: 'Please enter a valid name.', ephemeral: true });
+				}
 
 				// Validate region
 				const roleId = REGION_ROLES[region];
@@ -364,10 +369,21 @@ module.exports = {
 
 				try {
 					await member.roles.add(roleId);
-					// Usernames now come from the ODC API by Discord ID, so we no longer store one locally.
-					players.register(i.user.id);
+
+					if (players.isRegistered(i.user.id)) {
+						players.setUsername(i.user.id, username);
+					} else {
+						players.register(i.user.id, username);
+					}
+
+					try {
+						await member.setNickname(username);
+					} catch (err) {
+						console.error('Failed to set nickname:', err);
+					}
+
 					return i.reply({
-						content: `Welcome **${i.user.displayName}**! You've been given the **${region}** role.`,
+						content: `Welcome **${username}**! You've been given the **${region}** role.`,
 						ephemeral: true,
 					});
 				} catch (err) {

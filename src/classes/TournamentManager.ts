@@ -1,10 +1,10 @@
-import { Tournament, TournamentJSON, ActivityCheck, Region } from '../types';
+import { Tournament, TournamentJSON, ActivityCheck, Region, BracketFormat } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PlayerManager } from './PlayerManager';
 import { TeamsManager } from './TeamsManager';
 import { PartyManager } from './PartyManager';
-import { hasOdcAccount, getOdcUsersByDiscordIds, createTournament, createOneOffTeam, generateBracket, addOrganisers } from './OdcApi';
+import { createTournament, createOneOffTeam, generateBracket, addOrganisers } from './OdcApi';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, ChatInputCommandInteraction, Client, EmbedBuilder, TextChannel } from 'discord.js';
 import { client } from '..';
 
@@ -182,26 +182,25 @@ export class TournamentManager {
     if (!t) return 'not_found';
     if (t.participants.has(userId)) return 'already_in';
 
+    const playerManager = PlayerManager.getInstance();
+
     if (t.partyOnly) {
       const party = PartyManager.getInstance().getParty(userId);
       if (!party || !party.member) return 'no_party'
 
       if (t.participants.has(party.leader)) return 'already_in';
 
-      const hasAccount = await hasOdcAccount(userId);
-      if (!hasAccount) return 'not_registered';
+      if (!playerManager.isRegistered(userId)) return 'not_registered';
 
       const partnerId = userId === party.leader ? party.member : party.leader;
-      const partnerHasAccount = await hasOdcAccount(partnerId);
-      if (!partnerHasAccount) return 'partner_not_registered';
+      if (!playerManager.isRegistered(partnerId)) return 'partner_not_registered';
 
       t.participants.add(party.leader)
       this.save()
       return 'joined'
     }
 
-    const hasAccount = await hasOdcAccount(userId);
-    if (!hasAccount) return 'not_registered';
+    if (!playerManager.isRegistered(userId)) return 'not_registered';
 
     t.participants.add(userId);
     this.save();
@@ -331,9 +330,11 @@ export class TournamentManager {
     return teams;
   }
 
-  createTeams(interaction: ChatInputCommandInteraction, name: string): boolean {
+  createTeams(interaction: ChatInputCommandInteraction, name: string, format: BracketFormat): boolean {
     const t = this.tournaments.get(name);
     if (!t) return false;
+
+    t.format = format;
 
     const team_size = 4;
     const allPlayers = [...t.participants];
@@ -455,14 +456,15 @@ export class TournamentManager {
       return false;
     }
 
-    const odcUsers = await getOdcUsersByDiscordIds([...new Set(teams.flat())]);
-    const odcIdByDiscordId = new Map(odcUsers.map(u => [u.discordId, u.id]));
+    const guildID = process.env.GUILD_ID as string;
+    const guild = client.guilds.cache.get(guildID);
+    if (!guild) throw new Error('Guild not found');
 
     const tournament = await createTournament({
       name,
       region: t.region,
       type: 'community',
-      format: 'double',
+      format: t.format ?? 'double',
       signupType: 'admin_only',
       startsAt: new Date().toISOString(),
       gameConfig: {
@@ -499,25 +501,18 @@ export class TournamentManager {
     // make odc one-off teams, keyed by the participant ID ODC hands back
     const teamsData: Record<string, string[]> = {};
     const teamNames: Record<string, string> = {};
+    const playerManager = PlayerManager.getInstance();
 
     for (const [index, members] of teams.entries()) {
       const teamName = `Team ${index + 1}`;
 
-      const odcUserIds = members
-        .map(discordId => odcIdByDiscordId.get(discordId))
-        .filter((id): id is string => Boolean(id));
+      const metaUsernames = members.map(discordId => {
+        const stored = playerManager.get(discordId)?.username;
+        if (stored) return stored;
+        return guild.members.cache.get(discordId)?.displayName ?? discordId;
+      });
 
-      if (odcUserIds.length === 0) {
-        console.error(`Skipping ${teamName} in ${name}, none of its members have ODC accounts`);
-        await channel.send(`⚠️ Could not register **${teamName}** on ODC — none of its members have an ODC account.`);
-        continue;
-      }
-
-      if (odcUserIds.length !== members.length) {
-        console.warn(`${teamName} in ${name} has member(s) with no ODC account, they'll be missing from the roster on ODC`);
-      }
-
-      const participant = await createOneOffTeam(tournament._id, teamName, odcUserIds);
+      const participant = await createOneOffTeam(tournament._id, teamName, metaUsernames);
       if (!participant) {
         console.error(`Failed to create one-off team ${teamName} for ${name} on ODC`);
         await channel.send(`⚠️ Failed to register **${teamName}** on ODC.`);
@@ -536,10 +531,6 @@ export class TournamentManager {
     TeamsManager.getInstance().createTournament(name, teamsData, teamNames, tournament._id);
 
     this.delete(name); // remove tournament from our system since it's now in Teams
-
-    const guildID = process.env.GUILD_ID as string;
-    const guild = client.guilds.cache.get(guildID);
-    if (!guild) throw new Error('Guild not found');
 
     const configChannel = await guild.channels.create({
         name: `${name.toLowerCase().replace(/\s+/g, '-')}-config`,

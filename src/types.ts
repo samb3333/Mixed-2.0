@@ -2,11 +2,14 @@ interface Person {
 	name: string;
 }
 
+export type BracketFormat = 'single' | 'double';
+
 export interface Tournament {
   name: string;
   participants: Set<string>;
   partyOnly: boolean;
   region: Region;
+  format?: BracketFormat;
 }
 
 export interface TournamentJSON {
@@ -14,6 +17,7 @@ export interface TournamentJSON {
   participants: string[];
   partyOnly: boolean;
   region: Region;
+  format?: BracketFormat;
 }
 
 export interface ActivityCheck {
@@ -34,6 +38,7 @@ export const REGION_ROLES: Record<Region, string> = {
 export interface Player {
 	userId: string;
 	mmr: number;
+	username: string;
 }
 
 export interface TournamentTeams {
