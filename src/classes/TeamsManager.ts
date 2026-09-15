@@ -4,7 +4,7 @@ import { MatchRecord, TournamentTeams } from '../types';
 import { ChannelType, TextChannel, ThreadAutoArchiveDuration, ThreadChannel } from 'discord.js';
 import { client } from '..';
 import { PlayerManager } from './PlayerManager';
-import { getTournamentMatches, updateMatch, OdcMatch, OdcGame } from './OdcApi';
+import { getTournamentMatches, updateMatch, updateParticipant, findActiveMatchForParticipant, refreshMatchWhitelist, OdcMatch, OdcGame } from './OdcApi';
 
 const DB_PATH = path.join(__dirname, '../../data/teams.json');
 
@@ -307,5 +307,37 @@ export class TeamsManager {
     members[index] = newUserId;
     this.save();
     return true;
+  }
+
+  /** A team member's stored username, falling back to their current server display name. */
+  private resolveMetaUsername(userId: string): string {
+    const stored = PlayerManager.getInstance().get(userId)?.username;
+    if (stored) return stored;
+    const guild = client.guilds.cache.get(process.env.GUILD_ID as string);
+    return guild?.members.cache.get(userId)?.displayName ?? userId;
+  }
+
+  /**
+   * Pushes a team's current roster of usernames to ODC and, if the team is in an active match,
+   * refreshes that match's whitelist so the arena picks up the change.
+   */
+  async syncParticipant(tournamentName: string, participantId: string): Promise<'ok' | 'not_found' | 'update_failed'> {
+    const t = this.data.get(tournamentName);
+    if (!t) return 'not_found';
+    const members = t.teams[participantId];
+    if (!members) return 'not_found';
+
+    const metaUsernames = members.map(id => this.resolveMetaUsername(id));
+
+    const updated = await updateParticipant(t.odcTournamentId, participantId, { metaUsernames });
+    if (!updated) return 'update_failed';
+
+    const match = await findActiveMatchForParticipant(t.odcTournamentId, participantId);
+    if (match) {
+      const refreshed = await refreshMatchWhitelist(t.odcTournamentId, match._id);
+      if (!refreshed) console.error(`Failed to refresh whitelist for match ${match._id} in ${tournamentName}`);
+    }
+
+    return 'ok';
   }
 }

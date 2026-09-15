@@ -4,16 +4,7 @@ const API_BASE = 'https://oriondriftcompetitive.com/api/v1';
 // bearer token, and now holds an X-Api-Key value for this API instead.
 const API_KEY = process.env.ODC as string;
 
-const BATCH_DISCORD_LOOKUP_LIMIT = 50;
-
-export interface OdcUser {
-  id: string;
-  discordId: string;
-  displayName: string;
-  metaUsername: string;
-  roles: string[];
-  avatar: string;
-}
+const MATCHES_PAGE_LIMIT = 100;
 
 export type TournamentRegion = 'EU' | 'NA' | 'OCE';
 export type TournamentFormat = 'single' | 'double' | 'swiss';
@@ -128,30 +119,6 @@ async function odcRequest<T = unknown>(path: string, init?: RequestInit): Promis
   }
 }
 
-/** Resolves Discord IDs to ODC accounts. IDs with no account are simply absent from the result. */
-export async function getOdcUsersByDiscordIds(discordIds: string[]): Promise<OdcUser[]> {
-  const users: OdcUser[] = [];
-
-  for (let i = 0; i < discordIds.length; i += BATCH_DISCORD_LOOKUP_LIMIT) {
-    const batch = discordIds.slice(i, i + BATCH_DISCORD_LOOKUP_LIMIT);
-    if (batch.length === 0) continue;
-
-    const { ok, data } = await odcRequest<OdcUser[]>(`/users/batch/discord?discordIds=${batch.join(',')}`);
-    if (ok && data) users.push(...data);
-  }
-
-  return users;
-}
-
-export async function getOdcUserByDiscordId(discordId: string): Promise<OdcUser | null> {
-  const [user] = await getOdcUsersByDiscordIds([discordId]);
-  return user ?? null;
-}
-
-export async function hasOdcAccount(discordId: string): Promise<boolean> {
-  return (await getOdcUserByDiscordId(discordId)) !== null;
-}
-
 export async function createTournament(payload: CreateTournamentPayload): Promise<OdcTournament | null> {
   const { ok, data } = await odcRequest<OdcTournament>('/tournaments', {
     method: 'POST',
@@ -160,13 +127,26 @@ export async function createTournament(payload: CreateTournamentPayload): Promis
   return ok ? data : null;
 }
 
-/** Creates a one-off tournament team from a custom roster of ODC user IDs, no persistent team required. */
-export async function createOneOffTeam(tournamentId: string, name: string, userIds: string[]): Promise<OdcParticipant | null> {
+/** Creates a one-off tournament team from a manually-entered roster of meta usernames, no ODC account required. */
+export async function createOneOffTeam(tournamentId: string, name: string, metaUsernames: string[]): Promise<OdcParticipant | null> {
   const { ok, data } = await odcRequest<OdcParticipant>(`/tournaments/${tournamentId}/participants`, {
     method: 'POST',
-    body: JSON.stringify({ name, users: userIds }),
+    body: JSON.stringify({ name, metaUsernames }),
   });
   return ok ? data : null;
+}
+
+/** Changes a participant's name and/or meta usernames. Fields left out keep their current value. */
+export async function updateParticipant(
+  tournamentId: string,
+  participantId: string,
+  body: { name?: string; metaUsernames?: string[] }
+): Promise<boolean> {
+  const { ok } = await odcRequest(`/tournaments/${tournamentId}/participants/${participantId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+  return ok;
 }
 
 export async function generateBracket(tournamentId: string): Promise<boolean> {
@@ -182,12 +162,40 @@ export async function setTournamentState(tournamentId: string, state: Tournament
   return ok;
 }
 
+/** Fetches every match, paging through the API's 100-per-page limit. */
 export async function getTournamentMatches(tournamentId: string, params: Record<string, string> = {}): Promise<OdcMatch[]> {
-  const query = new URLSearchParams({ limit: '1000', ...params }).toString();
-  const { ok, data } = await odcRequest<{ data: OdcMatch[] }>(
-    `/tournaments/${tournamentId}/matches${query ? `?${query}` : ''}`
-  );
-  return ok && data ? data.data : [];
+  const matches: OdcMatch[] = [];
+  let page = 1;
+
+  while (true) {
+    const query = new URLSearchParams({ ...params, limit: String(MATCHES_PAGE_LIMIT), page: String(page) }).toString();
+    const { ok, data } = await odcRequest<{ data: OdcMatch[] }>(`/tournaments/${tournamentId}/matches?${query}`);
+    if (!ok || !data) break;
+
+    matches.push(...data.data);
+    if (data.data.length < MATCHES_PAGE_LIMIT) break;
+    page++;
+  }
+
+  return matches;
+}
+
+/** Finds a participant's current waiting/live match, i.e. the one holding an arena right now. */
+export async function findActiveMatchForParticipant(tournamentId: string, participantId: string): Promise<OdcMatch | null> {
+  for (const state of ['waiting', 'live'] as const) {
+    const matches = await getTournamentMatches(tournamentId, { state });
+    const match = matches.find(m => m.team1Id === participantId || m.team2Id === participantId);
+    if (match) return match;
+  }
+  return null;
+}
+
+/** Re-pushes a match's whitelists to its arena. Only works while the match still holds one. */
+export async function refreshMatchWhitelist(tournamentId: string, matchId: string): Promise<boolean> {
+  const { ok } = await odcRequest(`/tournaments/${tournamentId}/matches/${matchId}/whitelist/refresh`, {
+    method: 'POST',
+  });
+  return ok;
 }
 
 export async function updateMatch(tournamentId: string, matchId: string, body: Record<string, unknown>): Promise<boolean> {
@@ -213,27 +221,3 @@ export async function addOrganisers(tournamentId: string, userIds: string[]): Pr
   return true;
 }
 
-export type RosterOpResult = 'ok' | 'not_frozen' | 'not_found' | 'already_on_roster' | 'error';
-
-/** Adds an ODC user to a participant's frozen roster. `userId` is the ODC user ID. */
-export async function addPlayerToRoster(tournamentId: string, participantId: string, userId: string): Promise<RosterOpResult> {
-  const { ok, status } = await odcRequest(`/tournaments/${tournamentId}/participants/${participantId}/roster/${userId}`, {
-    method: 'POST',
-  });
-  if (ok) return 'ok';
-  if (status === 400) return 'not_frozen';
-  if (status === 404) return 'not_found';
-  if (status === 409) return 'already_on_roster';
-  return 'error';
-}
-
-/** Removes an ODC user from a participant's frozen roster. `userId` is the ODC user ID. */
-export async function removePlayerFromRoster(tournamentId: string, participantId: string, userId: string): Promise<RosterOpResult> {
-  const { ok, status } = await odcRequest(`/tournaments/${tournamentId}/participants/${participantId}/roster/${userId}`, {
-    method: 'DELETE',
-  });
-  if (ok) return 'ok';
-  if (status === 400) return 'not_frozen';
-  if (status === 404) return 'not_found';
-  return 'error';
-}

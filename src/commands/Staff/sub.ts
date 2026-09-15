@@ -1,15 +1,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
 import { TeamsManager } from '../../classes/TeamsManager';
-import { getOdcUserByDiscordId, addPlayerToRoster, removePlayerFromRoster, RosterOpResult } from '../../classes/OdcApi';
 
 const teamsManager = TeamsManager.getInstance();
-
-const ROSTER_ERROR_REASONS: Record<Exclude<RosterOpResult, 'ok'>, string> = {
-  not_frozen: 'the roster has not been frozen yet',
-  not_found: 'the tournament, team, or player was not found on ODC',
-  already_on_roster: 'that player is already on the roster',
-  error: 'an unexpected ODC API error occurred',
-};
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -51,36 +43,18 @@ module.exports = {
       return interaction.editReply(`<@${playerIn.id}> is already on a team in **${tournamentName}**.`);
     }
 
-    const [odcOut, odcIn] = await Promise.all([
-      getOdcUserByDiscordId(playerOut.id),
-      getOdcUserByDiscordId(playerIn.id),
-    ]);
-
-    if (!odcIn) {
-      return interaction.editReply(`<@${playerIn.id}> doesn't have an ODC account linked, so they can't be added to the roster.`);
-    }
-
-    const addResult = await addPlayerToRoster(tournament.odcTournamentId, participantId, odcIn.id);
-    if (addResult !== 'ok' && addResult !== 'already_on_roster') {
-      return interaction.editReply(`⚠️ Failed to add <@${playerIn.id}> to the roster on ODC: ${ROSTER_ERROR_REASONS[addResult]}.`);
-    }
-
-    let removeWarning = '';
-    if (odcOut) {
-      const removeResult = await removePlayerFromRoster(tournament.odcTournamentId, participantId, odcOut.id);
-      if (removeResult !== 'ok') {
-        removeWarning = `\n⚠️ <@${playerOut.id}> was **not** removed from the ODC roster (${ROSTER_ERROR_REASONS[removeResult]}) — remove them manually.`;
-      }
-    } else {
-      removeWarning = `\n⚠️ <@${playerOut.id}> has no linked ODC account, so there was nothing to remove from the ODC roster.`;
-    }
-
     const swapped = teamsManager.swapPlayer(tournamentName, participantId, playerOut.id, playerIn.id);
     if (!swapped) {
-      return interaction.editReply(`⚠️ Updated the ODC roster, but failed to update teams.json — please check it manually.${removeWarning}`);
+      return interaction.editReply('⚠️ Failed to update teams.json — please check it manually.');
     }
 
     const teamName = tournament.teamNames[participantId] ?? participantId;
-    await interaction.editReply(`✅ Swapped <@${playerOut.id}> out for <@${playerIn.id}> on **${teamName}** in **${tournamentName}**.${removeWarning}`);
+
+    const sync = await teamsManager.syncParticipant(tournamentName, participantId);
+    if (sync !== 'ok') {
+      return interaction.editReply(`⚠️ Swapped <@${playerOut.id}> out for <@${playerIn.id}> on **${teamName}** locally, but failed to sync the roster/whitelist on ODC — please refresh it manually.`);
+    }
+
+    await interaction.editReply(`✅ Swapped <@${playerOut.id}> out for <@${playerIn.id}> on **${teamName}** in **${tournamentName}**.`);
   },
 };
