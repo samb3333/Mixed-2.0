@@ -117,12 +117,12 @@ module.exports = {
 				}
 				if (result === 'not_registered') {
 				return i.editReply({
-					content: 'You need to register first! Use the registration button to get set up, then try again.'
+					content: 'You need to register first! /edit_username to set your in-game name, then try again.'
 				});
 				}
 				if (result === 'partner_not_registered') {
 				return i.editReply({
-					content: 'Your party partner needs to register first! Have them use the registration button, then try again.'
+					content: 'Your party partner needs to register first! /edit_username to set their in-game name, then try again.'
 				});
 				}
 				if (result === 'no_party') {
