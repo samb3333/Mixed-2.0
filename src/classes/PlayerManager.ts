@@ -65,9 +65,13 @@ export class PlayerManager {
     return this.players.get(userId);
   }
 
-  setUsername(userId: string, username: string): Player | 'not_found' {
+  setUsername(userId: string, username: string): Player | 'registered' {
     const player = this.players.get(userId);
-    if (!player) return 'not_found';
+    if (!player) {
+      this.register(userId, username);
+      return 'registered';
+    }
+    
     player.username = username;
     this.save();
     return player;

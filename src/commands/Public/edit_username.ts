@@ -19,8 +19,8 @@ module.exports = {
     }
 
     const result = PlayerManager.getInstance().setUsername(interaction.user.id, username);
-    if (result === 'not_found') {
-      return interaction.editReply('You need to register first! Use the registration button in the server.');
+    if (result === 'registered') {
+      return interaction.editReply('✅ Your username has been set to **${username}**.');
     }
 
     try {
