@@ -330,11 +330,12 @@ export class TournamentManager {
     return teams;
   }
 
-  createTeams(interaction: ChatInputCommandInteraction, name: string, format: BracketFormat): boolean {
+  createTeams(interaction: ChatInputCommandInteraction, name: string, format: BracketFormat, fleetId: string): boolean {
     const t = this.tournaments.get(name);
     if (!t) return false;
 
     t.format = format;
+    t.fleetId = fleetId;
 
     const team_size = 4;
     const allPlayers = [...t.participants];
@@ -468,7 +469,7 @@ export class TournamentManager {
       signupType: 'admin_only',
       startsAt: new Date().toISOString(),
       gameConfig: {
-        fleetId: process.env.FLEET_ID || '1c74c4a2-b3b0-407d-b30a-f0ec6538a397',
+        fleetId: t.fleetId || '1c74c4a2-b3b0-407d-b30a-f0ec6538a397',
         arenas: ['gamma 01', 'beta 01', 'gamma 02', 'beta 02', 'gamma 03', 'beta 03'],
       },
       settings: {
