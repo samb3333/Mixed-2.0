@@ -18,6 +18,13 @@ module.exports = {
 				{ name: 'Double Elimination', value: 'double' },
 			)
 		)
+		.addStringOption(option =>
+		option.setName('fleet').setDescription('The fleet the matches should be created in').setRequired(true)
+			.addChoices(
+				{ name: 'ODC Matches', value: 'bd6946d4-1853-4a3b-9f57-3be2ddc7d67c' },
+				{ name: 'Tournament Fleet', value: '1c74c4a2-b3b0-407d-b30a-f0ec6538a397' },
+			)
+		)
 		.setDefaultMemberPermissions(0),
 
 	async execute(interaction: ChatInputCommandInteraction) {
@@ -25,8 +32,9 @@ module.exports = {
 		await interaction.deferReply({ ephemeral: true });
 		const name = interaction.options.getString('name', true);
 		const format = interaction.options.getString('format', true) as BracketFormat;
+		const fleetId = interaction.options.getString('fleet', true);
 
-		const result = manager.createTeams(interaction, name, format);
+		const result = manager.createTeams(interaction, name, format, fleetId);
 
 		if (!result) {
 			await interaction.editReply({ 

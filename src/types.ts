@@ -10,6 +10,7 @@ export interface Tournament {
   partyOnly: boolean;
   region: Region;
   format?: BracketFormat;
+  fleetId?: string;
 }
 
 export interface TournamentJSON {
@@ -18,6 +19,7 @@ export interface TournamentJSON {
   partyOnly: boolean;
   region: Region;
   format?: BracketFormat;
+  fleetId?: string;
 }
 
 export interface ActivityCheck {
