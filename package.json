@@ -5,7 +5,8 @@
   "type": "commonjs",
   "scripts": {
     "dev": "npm run build && node --enable-source-maps dist/index.js",
-    "build": "tsc"
+    "build": "tsc",
+    "test": "npm run build && node --test tests/*.test.cjs"
   },
   "keywords": [],
   "author": "",
