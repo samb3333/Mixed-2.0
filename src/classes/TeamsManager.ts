@@ -320,11 +320,12 @@ export class TeamsManager {
   /**
    * Pushes a team's current roster of usernames to ODC and, if the team is in an active match,
    * refreshes that match's whitelist so the arena picks up the change.
+   * Pass `roster` to push a roster that hasn't been saved locally yet.
    */
-  async syncParticipant(tournamentName: string, participantId: string): Promise<'ok' | 'not_found' | 'update_failed'> {
+  async syncParticipant(tournamentName: string, participantId: string, roster?: string[]): Promise<'ok' | 'not_found' | 'update_failed'> {
     const t = this.data.get(tournamentName);
     if (!t) return 'not_found';
-    const members = t.teams[participantId];
+    const members = roster ?? t.teams[participantId];
     if (!members) return 'not_found';
 
     const metaUsernames = members.map(id => this.resolveMetaUsername(id));
