@@ -43,16 +43,18 @@ module.exports = {
       return interaction.editReply(`<@${playerIn.id}> is already on a team in **${tournamentName}**.`);
     }
 
-    const swapped = teamsManager.swapPlayer(tournamentName, participantId, playerOut.id, playerIn.id);
-    if (!swapped) {
-      return interaction.editReply('⚠️ Failed to update teams.json — please check it manually.');
+    const teamName = tournament.teamNames[participantId] ?? participantId;
+    const newRoster = tournament.teams[participantId].map(id => (id === playerOut.id ? playerIn.id : id));
+
+    // Push to ODC first so a failed sync leaves teams.json untouched.
+    const sync = await teamsManager.syncParticipant(tournamentName, participantId, newRoster);
+    if (sync !== 'ok') {
+      return interaction.editReply('⚠️ Failed to update the roster on ODC — nothing was changed. Please try again.');
     }
 
-    const teamName = tournament.teamNames[participantId] ?? participantId;
-
-    const sync = await teamsManager.syncParticipant(tournamentName, participantId);
-    if (sync !== 'ok') {
-      return interaction.editReply(`⚠️ Swapped <@${playerOut.id}> out for <@${playerIn.id}> on **${teamName}** locally, but failed to sync the roster/whitelist on ODC — please refresh it manually.`);
+    const swapped = teamsManager.swapPlayer(tournamentName, participantId, playerOut.id, playerIn.id);
+    if (!swapped) {
+      return interaction.editReply('⚠️ Updated the roster on ODC, but failed to update teams.json — please check it manually.');
     }
 
     await interaction.editReply(`✅ Swapped <@${playerOut.id}> out for <@${playerIn.id}> on **${teamName}** in **${tournamentName}**.`);
