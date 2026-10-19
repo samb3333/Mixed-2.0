@@ -33,7 +33,7 @@ Built with **TypeScript**, **Node.js** and **discord.js**, and connected to the 
 ## Who it works with
 
 - **Players** in the Orion Drift community, across the EU, NA and OCE regions, who sign up and play entirely through Discord.
-- **Tournament staff**, who run every step from Discord with slash commands and buttons instead of setting up brackets by hand.
+- **Another Axiom**, who are the makers of Orion Drift and we work with to get specialized servers in the game to run these tournaments.
 - **Orion Drift Competitive (ODC)**, the competitive platform that hosts the brackets and matches. The bot talks to it through its API.
 - **Discord**, through the discord.js library.
 
